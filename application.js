@@ -269,16 +269,17 @@ class Application {
     #connectWindowGrabs() {
         // start snapping when the user starts moving a window
         this.#signals.connect(global.display, 'grab-op-begin', (display, screen, window, op) => {
-            if (op === Meta.GrabOp.MOVING && window.window_type === Meta.WindowType.NORMAL) {                                
+            if (op === Meta.GrabOp.MOVING && window.window_type === Meta.WindowType.NORMAL) {
                 // reload styling
                 this.#loadThemeColors();
                 const enableSnappingModifiers = mapModifierSettingToModifierType(this.#settings.settingsData.enableSnappingModifiers.value);
-                
+                const enableMultiSnappingModifiers = mapModifierSettingToModifierType(this.#settings.settingsData.enableMultiSnappingModifiers.value);
+
                 // Create WindowSnapper for each monitor
                 const nMonitors = global.display.get_n_monitors();
                 for (let i = 0; i < nMonitors; i++) {
                     const layout = this.#readOrCreateLayoutForDisplay(i, LayoutOf2x2);
-                    const snapper = new WindowSnapper(i, layout, window, enableSnappingModifiers);
+                    const snapper = new WindowSnapper(i, layout, window, enableSnappingModifiers, enableMultiSnappingModifiers);
                     this.#windowSnappers.push(snapper);
                 }
             }
