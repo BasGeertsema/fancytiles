@@ -294,6 +294,19 @@ class LayoutNode {
         return this.children.reduce((found, child) => found || child.findNode(predicate), null);
     }
 
+    // find all node in the tree that matches the given predicate and return them in flat list
+    findAllNodes(predicate) {
+        let result = [];
+
+        this.forSelfAndDescendants((n) => {
+            if(predicate(n)) {
+                result.push(n);
+            }
+        })
+
+        return result;
+    }
+
     // delete the given node in the tree if found
     delete(node) {
         let index = this.children.indexOf(node);
@@ -738,10 +751,12 @@ class PreviewSplitOperation extends LayoutOperation {
 class SnappingOperation extends LayoutOperation {
     showRegions = false;
     #enableSnappingModifiers;
+    #enableMultiSnappingModifiers;
 
-    constructor(tree, enableSnappingModifiers) {
+    constructor(tree, enableSnappingModifiers, enableMultiSnappingModifiers) {
         super(tree);
         this.#enableSnappingModifiers = enableSnappingModifiers;
+        this.#enableMultiSnappingModifiers = enableMultiSnappingModifiers;
     }
 
     onMotion(x, y, state) {
@@ -751,19 +766,28 @@ class SnappingOperation extends LayoutOperation {
             return this.cancel();
         }
 
+        const multiSnapEnabled = this.#enableMultiSnappingModifiers.some((e) => (state & e));
+
         // Find node at mouse position
         let node = this.tree.findNodeAtPosition(x, y);
         if (!node) {
-            return this.cancel();
+            if(!multiSnapEnabled){
+                return this.cancel();
+            }
+
+            return OperationResult.notHandled();
         }
 
         // activate the region to snap into
         this.showRegions = true;
 
-        this.tree.forSelfAndDescendants(n => {
-            n.isSnappingDestination = false;
-            n.isHighlighted = false;
-        });
+        if(!multiSnapEnabled) {
+            this.tree.forSelfAndDescendants(n => {
+                n.isSnappingDestination = false;
+                n.isHighlighted = false;
+            });
+        }
+
         node.isSnappingDestination = true;
         node.isHighlighted = true;
 
@@ -771,11 +795,33 @@ class SnappingOperation extends LayoutOperation {
     }
 
     currentSnapToRect() {
-        var snapToNode = this.tree.findNode(n => n.isSnappingDestination);
-        if (!snapToNode) {
+        let snapToNodes = this.tree.findAllNodes(n => n.isSnappingDestination);
+
+        if (snapToNodes.length == 0) {
             return null;
         }
-        return snapToNode.snapRect();
+
+        return snapToNodes
+            .map((n) => n.snapRect())
+            .reduce((rect_a, rect_b) => {
+                let min_x = Math.min(rect_a.x, rect_b.x);
+                let min_y = Math.min(rect_a.y, rect_b.y);
+                let max_x = Math.max(
+                    rect_a.x + rect_a.width,
+                    rect_b.x + rect_b.width,
+                );
+                let max_y = Math.max(
+                    rect_a.y + rect_a.height,
+                    rect_b.y + rect_b.height,
+                );
+
+                return {
+                    x: min_x,
+                    y: min_y,
+                    width: max_x - min_x,
+                    height: max_y - min_y,
+                };
+            });
     }
 
     cancel() {

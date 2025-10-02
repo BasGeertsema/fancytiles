@@ -30,9 +30,12 @@ class WindowSnapper {
     // the modifier key to enable snapping
     #enableSnappingModifiers;
 
+    // the modifier key to enable snapping to multiple areas
+    #enableMultiSnappingModifiers;
+
     #signals = new SignalManager.SignalManager(null);
 
-    constructor(displayIdx, layout, window, enableSnappingModifiers) {
+    constructor(displayIdx, layout, window, enableSnappingModifiers, enableMultiSnappingModifiers) {
         // the layout to use for the snapping operation
         this.#layout = layout;
 
@@ -41,6 +44,9 @@ class WindowSnapper {
 
         // the modifier key to enable snapping
         this.#enableSnappingModifiers = enableSnappingModifiers;
+
+        // the modifier key to enable snapping to multiple areas
+        this.#enableMultiSnappingModifiers = enableMultiSnappingModifiers;
 
         // get the size of the display
         let workArea = getUsableScreenArea(displayIdx);
@@ -65,7 +71,7 @@ class WindowSnapper {
 
         // ensure the layout is correct for the snap area
         this.#layout.calculateRects(workArea.x, workArea.y, workArea.width, workArea.height);
-        this.#snappingOperation = new SnappingOperation(this.#layout, this.#enableSnappingModifiers);
+        this.#snappingOperation = new SnappingOperation(this.#layout, this.#enableSnappingModifiers, this.#enableMultiSnappingModifiers);
 
         this.#signals.connect(this.#window, 'position-changed', this.#onWindowMoved.bind(this));
     }

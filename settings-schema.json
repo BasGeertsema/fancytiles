@@ -15,5 +15,17 @@
       "SUPER": "SUPER",
       "SHIFT": "SHIFT"
     }
+  },
+  "enableMultiSnappingModifiers": {
+    "type": "combobox",
+    "description": "Key modifier required to activate snapping to multiple arias",
+    "default": "",
+    "options": {
+      "(disabled)": "",
+      "CTRL": "CTRL",
+      "ALT": "ALT",
+      "SUPER": "SUPER",
+      "SHIFT": "SHIFT"
+    }
   }
 }
