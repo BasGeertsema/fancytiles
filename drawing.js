@@ -74,7 +74,7 @@ function addMargins(rect, margin) {
     }
 }
 
-function drawLayout(cr, node, displayRect, colors = DefaultColors, cornerRadius = 10) {
+function drawLayout(cr, node, displayRect, colors = DefaultColors, cornerRadius = 10, zoneCounter = { count: 0 }) {
     if (!node) return;
 
     // Draw current node
@@ -97,10 +97,71 @@ function drawLayout(cr, node, displayRect, colors = DefaultColors, cornerRadius 
 
         let regionRect = addMargins({ x, y, width, height }, node.margin);
         drawRoundedRect(cr, regionRect, cornerRadius, c, colors.border);
+
+        // Increment and draw zone number with size
+        zoneCounter.count++;
+        const zoneNumber = zoneCounter.count;
+
+        // Draw zone number and size (width x height in pixels) - use regionRect for live updates
+        const sizeText = `${Math.round(regionRect.width)}x${Math.round(regionRect.height)}`;
+
+        // Standard uniform font sizes - scale down only if zone is too small
+        const baseNumberSize = 72;  // doubled for 4K visibility
+        const baseSizeTextSize = 36; // doubled for 4K visibility
+        const minDimension = Math.min(regionRect.width, regionRect.height);
+        const scaleFactor = Math.min(1, minDimension / 200); // scale down if smaller than 200px
+
+        const numberFontSize = baseNumberSize * scaleFactor;
+        const sizeFontSize = baseSizeTextSize * scaleFactor;
+
+        cr.setSourceRGBA(colors.border.r, colors.border.g, colors.border.b, 1);
+        cr.selectFontFace('Sans', 0, 1); // Cairo.FontSlant.NORMAL, Cairo.FontWeight.BOLD
+
+        // Measure text to center it
+        cr.setFontSize(numberFontSize);
+        const numberExtents = cr.textExtents(zoneNumber.toString());
+
+        cr.setFontSize(sizeFontSize);
+        const sizeExtents = cr.textExtents(sizeText);
+
+        // Calculate center position
+        const centerX = regionRect.x + regionRect.width / 2;
+        const centerY = regionRect.y + regionRect.height / 2;
+        const totalHeight = numberExtents.height + sizeExtents.height + 15; // 15px spacing (increased)
+
+        // Draw zone number with shadow for readability (centered, larger)
+        cr.setFontSize(numberFontSize);
+        const numberX = centerX - numberExtents.width / 2;
+        const numberY = centerY - totalHeight / 2 + numberExtents.height;
+
+        // Shadow/outline for zone number
+        cr.setSourceRGBA(0, 0, 0, 0.8); // dark shadow
+        cr.moveTo(numberX + 2, numberY + 2);
+        cr.showText(zoneNumber.toString());
+
+        // Main zone number text
+        cr.setSourceRGBA(colors.border.r, colors.border.g, colors.border.b, 1);
+        cr.moveTo(numberX, numberY);
+        cr.showText(zoneNumber.toString());
+
+        // Draw size with shadow for readability (centered, smaller, below number)
+        cr.setFontSize(sizeFontSize);
+        const sizeX = centerX - sizeExtents.width / 2;
+        const sizeY = centerY + totalHeight / 2;
+
+        // Shadow/outline for size text
+        cr.setSourceRGBA(0, 0, 0, 0.8); // dark shadow
+        cr.moveTo(sizeX + 2, sizeY + 2);
+        cr.showText(sizeText);
+
+        // Main size text
+        cr.setSourceRGBA(colors.border.r, colors.border.g, colors.border.b, 1);
+        cr.moveTo(sizeX, sizeY);
+        cr.showText(sizeText);
     }
 
     for (let child of node.children) {
-        drawLayout(cr, child, displayRect, colors, cornerRadius);
+        drawLayout(cr, child, displayRect, colors, cornerRadius, zoneCounter);
     }
 }
 
