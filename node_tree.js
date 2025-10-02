@@ -327,6 +327,63 @@ class LayoutNode {
         return this.children.reduce((found, child) => found || child.findNodeAtPosition(x, y), null);
     }
 
+    // find all leaf nodes near the given position (for multi-zone spanning)
+    findNodesNearPosition(x, y, threshold = 60) {
+        let nearbyNodes = [];
+        let insideNodes = [];
+
+        this.forSelfAndDescendants(node => {
+            if (!node.isLeaf()) return;
+
+            // Check if inside the node (highest priority)
+            let insideX = x >= node.rect.x && x <= node.rect.x + node.rect.width;
+            let insideY = y >= node.rect.y && y <= node.rect.y + node.rect.height;
+
+            if (insideX && insideY) {
+                insideNodes.push(node);
+                return;
+            }
+
+            // Check if position is within threshold of any edge
+            let nearLeft = Math.abs(x - node.rect.x) <= threshold;
+            let nearRight = Math.abs(x - (node.rect.x + node.rect.width)) <= threshold;
+            let nearTop = Math.abs(y - node.rect.y) <= threshold;
+            let nearBottom = Math.abs(y - (node.rect.y + node.rect.height)) <= threshold;
+
+            // Include node if position is near edges (but prioritize inside nodes)
+            if ((insideX || nearLeft || nearRight) && (insideY || nearTop || nearBottom)) {
+                nearbyNodes.push(node);
+            }
+        });
+
+        // Return inside nodes with highest priority, then nearby nodes
+        return insideNodes.length > 0 ? [...insideNodes, ...nearbyNodes] : nearbyNodes;
+    }
+
+    // check if two nodes are adjacent (share an edge)
+    areNodesAdjacent(node1, node2) {
+        if (!node1 || !node2) return false;
+
+        let tolerance = 15;
+
+        // Check horizontal adjacency (left/right)
+        let horizontalOverlap = !(node1.rect.y + node1.rect.height <= node2.rect.y + tolerance ||
+                                  node2.rect.y + node2.rect.height <= node1.rect.y + tolerance);
+
+        let node1RightOfNode2 = Math.abs(node1.rect.x - (node2.rect.x + node2.rect.width)) <= tolerance;
+        let node2RightOfNode1 = Math.abs(node2.rect.x - (node1.rect.x + node1.rect.width)) <= tolerance;
+
+        // Check vertical adjacency (top/bottom)
+        let verticalOverlap = !(node1.rect.x + node1.rect.width <= node2.rect.x + tolerance ||
+                                node2.rect.x + node2.rect.width <= node1.rect.x + tolerance);
+
+        let node1BelowNode2 = Math.abs(node1.rect.y - (node2.rect.y + node2.rect.height)) <= tolerance;
+        let node2BelowNode1 = Math.abs(node2.rect.y - (node1.rect.y + node1.rect.height)) <= tolerance;
+
+        return (horizontalOverlap && (node1RightOfNode2 || node2RightOfNode1)) ||
+               (verticalOverlap && (node1BelowNode2 || node2BelowNode1));
+    }
+
     // get the rectangle of the divider for this node, useful for grabbing and moving the divider
     getDividerRect(dividerWidth) {
         dividerWidth = Math.max(dividerWidth, 2 * this.margin);
@@ -751,31 +808,87 @@ class SnappingOperation extends LayoutOperation {
             return this.cancel();
         }
 
-        // Find node at mouse position
-        let node = this.tree.findNodeAtPosition(x, y);
-        if (!node) {
+        // Find nodes near mouse position for multi-zone spanning
+        let nearbyNodes = this.tree.findNodesNearPosition(x, y);
+        if (!nearbyNodes || nearbyNodes.length === 0) {
             return this.cancel();
         }
 
-        // activate the region to snap into
-        this.showRegions = true;
-
+        // Reset all snapping destinations and highlighting
         this.tree.forSelfAndDescendants(n => {
             n.isSnappingDestination = false;
             n.isHighlighted = false;
         });
-        node.isSnappingDestination = true;
-        node.isHighlighted = true;
 
+        // For multi-zone spanning, check if nodes are adjacent
+        if (nearbyNodes.length > 1) {
+            let adjacentNodes = [];
+            let mainNode = nearbyNodes[0]; // The primary node
+            adjacentNodes.push(mainNode);
+
+            // Find all nodes adjacent to the main node
+            for (let i = 1; i < nearbyNodes.length; i++) {
+                if (this.tree.areNodesAdjacent(mainNode, nearbyNodes[i])) {
+                    adjacentNodes.push(nearbyNodes[i]);
+                }
+            }
+
+            // Set all adjacent nodes as snapping destinations
+            adjacentNodes.forEach(node => {
+                node.isSnappingDestination = true;
+                node.isHighlighted = true;
+            });
+        } else {
+            // Single zone
+            nearbyNodes[0].isSnappingDestination = true;
+            nearbyNodes[0].isHighlighted = true;
+        }
+
+        this.showRegions = true;
         return OperationResult.handledAndRedraw();
     }
 
     currentSnapToRect() {
-        var snapToNode = this.tree.findNode(n => n.isSnappingDestination);
-        if (!snapToNode) {
+        // Find all nodes that are snapping destinations
+        let snapToNodes = [];
+        this.tree.forSelfAndDescendants(n => {
+            if (n.isSnappingDestination) {
+                snapToNodes.push(n);
+            }
+        });
+
+        if (snapToNodes.length === 0) {
             return null;
         }
-        return snapToNode.snapRect();
+
+        if (snapToNodes.length === 1) {
+            // Single zone
+            return snapToNodes[0].snapRect();
+        }
+
+        // Multiple zones - calculate combined rectangle
+        let combinedRect = null;
+        snapToNodes.forEach(node => {
+            let nodeRect = node.snapRect();
+            if (!combinedRect) {
+                combinedRect = { ...nodeRect };
+            } else {
+                // Expand combined rectangle to include this node
+                let left = Math.min(combinedRect.x, nodeRect.x);
+                let top = Math.min(combinedRect.y, nodeRect.y);
+                let right = Math.max(combinedRect.x + combinedRect.width, nodeRect.x + nodeRect.width);
+                let bottom = Math.max(combinedRect.y + combinedRect.height, nodeRect.y + nodeRect.height);
+
+                combinedRect = {
+                    x: left,
+                    y: top,
+                    width: right - left,
+                    height: bottom - top
+                };
+            }
+        });
+
+        return combinedRect;
     }
 
     cancel() {
