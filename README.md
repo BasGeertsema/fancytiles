@@ -18,13 +18,17 @@ Open Cinnamon Extensions, click on the Fancy Tiles extension and click the '+' b
 
 ## Quick start
 
-After enabling the extension, press `<SUPER>+G` to open the layout editor. It will start by a 2x2 grid layout. Click and drag the dividers (the lines between regions) to resize the regions. If you want to split a region, press `<SHIFT>` or `<CTRL>` while hovering over the region to split the region horizontally or vertically. Use the `right mouse button` to remove dividers. Use `<Page Up>` and `<Page Down>` to increase or decrease the spacing between the regions.
+After enabling the extension, press `<SUPER>+G` to open the layout editor. It will start with a 2x2 grid layout. Click and drag the dividers (the lines between regions) to resize the regions. If you want to split a region, press `<SHIFT>` or `<CTRL>` while hovering over the region to split the region horizontally or vertically. Use the `right mouse button` to remove dividers. Use `<Page Up>` and `<Page Down>` to increase or decrease the spacing between the regions.
 
 After you have crafted your desired layout, exit the editor using `<SUPER>+G` or `<ESC>`.
 
 ![Layout editor](docs/layout-editor.png)
 
-Now, start dragging a window and simultaneously hold the `<CTRL>` key. The layout will become visible. Hover your mose over the region you want the window to snap to and release the mouse button. The window will now be snapped into place.
+Now, start dragging a window and simultaneously hold the `<CTRL>` key. The layout will become visible. Hover your mouse over the region you want the window to snap to and release the mouse button. The window will now be snapped into place.
+
+### Multi-zone spanning
+
+Windows can now span across multiple adjacent regions. When dragging a window near the edge between two adjacent regions, both regions will be highlighted, and the window will snap to cover the combined area of both regions.
 
 ![Layout editor](docs/window-snapping.png)
 
