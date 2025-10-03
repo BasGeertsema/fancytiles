@@ -104,6 +104,7 @@ function drawLayout(cr, node, displayRect, colors = DefaultColors, cornerRadius 
 
         // Draw zone number and size (width x height in pixels) - use regionRect for live updates
         const sizeText = `${Math.round(regionRect.width)}x${Math.round(regionRect.height)}`;
+        const gapText = `Gap: ${node.margin}px`;
 
         // Standard uniform font sizes - scale down only if zone is too small
         const baseNumberSize = 72;  // doubled for 4K visibility
@@ -123,11 +124,12 @@ function drawLayout(cr, node, displayRect, colors = DefaultColors, cornerRadius 
 
         cr.setFontSize(sizeFontSize);
         const sizeExtents = cr.textExtents(sizeText);
+        const gapExtents = cr.textExtents(gapText);
 
         // Calculate center position
         const centerX = regionRect.x + regionRect.width / 2;
         const centerY = regionRect.y + regionRect.height / 2;
-        const totalHeight = numberExtents.height + sizeExtents.height + 15; // 15px spacing (increased)
+        const totalHeight = numberExtents.height + sizeExtents.height + gapExtents.height + 25; // spacing for 3 lines
 
         // Draw zone number with shadow for readability (centered, larger)
         cr.setFontSize(numberFontSize);
@@ -158,6 +160,21 @@ function drawLayout(cr, node, displayRect, colors = DefaultColors, cornerRadius 
         cr.setSourceRGBA(colors.border.r, colors.border.g, colors.border.b, 1);
         cr.moveTo(sizeX, sizeY);
         cr.showText(sizeText);
+
+        // Draw gap text with shadow for readability (centered, smaller, below size)
+        cr.setFontSize(sizeFontSize);
+        const gapX = centerX - gapExtents.width / 2;
+        const gapY = sizeY + gapExtents.height + 10; // 10px below size text
+
+        // Shadow/outline for gap text
+        cr.setSourceRGBA(0, 0, 0, 0.8); // dark shadow
+        cr.moveTo(gapX + 2, gapY + 2);
+        cr.showText(gapText);
+
+        // Main gap text
+        cr.setSourceRGBA(colors.border.r, colors.border.g, colors.border.b, 1);
+        cr.moveTo(gapX, gapY);
+        cr.showText(gapText);
     }
 
     for (let child of node.children) {
