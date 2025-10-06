@@ -152,10 +152,10 @@ class Application {
         let borderColor = stylingActor.get_theme_node().get_border_color(St.Side.TOP);
         if (borderColor) {
             this.#colors.border = {
-                r: borderColor.red / 255,
-                g: borderColor.green / 255,
-                b: borderColor.blue / 255,
-                a: borderColor.alpha / 255
+                r: borderColor.red / 128,
+                g: borderColor.green / 128,
+                b: borderColor.blue / 128,
+                a: borderColor.alpha / 128
             };
         }
 
