@@ -60,6 +60,11 @@ class LayoutNode {
     // the on-screen rectangle covering the region of the node
     rect = { x: 0, y: 0, width: 0, height: 0 };
 
+    // the inset node is a fixed node that is used as a cutout for this node
+    // and its descendants when drawing. in the resulting cutout, the node is drawn.
+    // this functionality is used to draw the cutout for multi-snapping.
+    insetNode = null;
+
     // isResizing indicates if the divider belonging to this node is being moved by the user
     isResizing = false;
 
@@ -786,6 +791,17 @@ class SnappingOperation extends LayoutOperation {
                 n.isSnappingDestination = false;
                 n.isHighlighted = false;
             });
+            this.tree.insetNode = null;
+        } else {
+            const multisnapRect = this.multisnapRect();
+            if(!this.tree.insetNode){
+                this.tree.insetNode = new LayoutNode(0);
+                this.tree.insetNode.parent = this.tree;            
+                this.tree.insetNode.margin = node.margin;
+                this.tree.insetNode.isSnappingDestination = true;
+                this.tree.insetNode.isHighlighted = true;
+            }            
+            this.tree.insetNode.rect = multisnapRect;
         }
 
         node.isSnappingDestination = true;
@@ -794,7 +810,7 @@ class SnappingOperation extends LayoutOperation {
         return OperationResult.handledAndRedraw();
     }
 
-    currentSnapToRect() {
+    multisnapRect() {
         let snapToNodes = this.tree.findAllNodes(n => n.isSnappingDestination);
 
         if (snapToNodes.length == 0) {
@@ -802,7 +818,7 @@ class SnappingOperation extends LayoutOperation {
         }
 
         return snapToNodes
-            .map((n) => n.snapRect())
+            .map((n) => n.rect)
             .reduce((rect_a, rect_b) => {
                 let min_x = Math.min(rect_a.x, rect_b.x);
                 let min_y = Math.min(rect_a.y, rect_b.y);
@@ -824,7 +840,21 @@ class SnappingOperation extends LayoutOperation {
             });
     }
 
+    currentSnapToRect() {        
+        if(this.tree.insetNode){
+            return this.tree.insetNode.snapRect();
+        }
+
+        const snapToNode = this.tree.findNode(n => n.isSnappingDestination);
+        if (!snapToNode) {
+            return null;
+        }
+        return snapToNode.snapRect();
+    }
+
     cancel() {
+        this.tree.insetNode = null;
+
         if (this.showRegions) {
             this.showRegions = false;
             this.tree.forSelfAndDescendants(n => {
