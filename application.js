@@ -75,12 +75,12 @@ function mapModifierSettingToModifierType(modifierSetting) {
             return [Clutter.ModifierType.SUPER_MASK, Clutter.ModifierType.MOD4_MASK];
         case 'SHIFT':
             return [Clutter.ModifierType.SHIFT_MASK];
-        default:            
+        default:
             return [];
     }
 }
 
-// The application class is only constructed once and is the main entry 
+// The application class is only constructed once and is the main entry
 // of the extension.
 class Application {
     // the active grid editor
@@ -132,7 +132,7 @@ class Application {
     }
 
     #loadThemeColors() {
-        // hidden element to fetch the styling    
+        // hidden element to fetch the styling
         let stylingActor = new St.DrawingArea({
             style_class: 'tile-preview tile-hud',
             visible: false
@@ -182,7 +182,7 @@ class Application {
     }
 
     #enableHotkey() {
-        this.#disableHotkey();        
+        this.#disableHotkey();
         Main.keybindingManager.addHotKey('fancytiles', this.#settings.settingsData.hotkey.value, this.#toggleEditor.bind(this));
     }
 
@@ -303,4 +303,4 @@ class Application {
     }
 }
 
-module.exports = { Application, LayoutOf2x2 }; 
+module.exports = { Application, LayoutOf2x2 };
