@@ -33,9 +33,12 @@ class WindowSnapper {
     // the modifier key to enable snapping to multiple areas
     #enableMultiSnappingModifiers;
 
+    // whether to merge adjacent regions when hovering over the shared border
+    #enableAdjacentMerging;
+
     #signals = new SignalManager.SignalManager(null);
 
-    constructor(displayIdx, layout, window, enableSnappingModifiers, enableMultiSnappingModifiers) {
+    constructor(displayIdx, layout, window, enableSnappingModifiers, enableMultiSnappingModifiers, enableAdjacentMerging) {
         // the layout to use for the snapping operation
         this.#layout = layout;
 
@@ -47,6 +50,11 @@ class WindowSnapper {
 
         // the modifier key to enable snapping to multiple areas
         this.#enableMultiSnappingModifiers = enableMultiSnappingModifiers;
+
+        // whether to merge adjacent regions when hovering over the shared border
+        this.#enableAdjacentMerging = enableAdjacentMerging;
+
+        console.log('enableAdjacentMerging', enableAdjacentMerging);
 
         // get the size of the display
         let workArea = getUsableScreenArea(displayIdx);

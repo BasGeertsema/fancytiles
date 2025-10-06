@@ -757,11 +757,13 @@ class SnappingOperation extends LayoutOperation {
     showRegions = false;
     #enableSnappingModifiers;
     #enableMultiSnappingModifiers;
-
-    constructor(tree, enableSnappingModifiers, enableMultiSnappingModifiers) {
+    #enableAdjacentMerging;
+    
+    constructor(tree, enableSnappingModifiers, enableMultiSnappingModifiers, enableAdjacentMerging) {
         super(tree);
         this.#enableSnappingModifiers = enableSnappingModifiers;
         this.#enableMultiSnappingModifiers = enableMultiSnappingModifiers;
+        this.#enableAdjacentMerging = enableAdjacentMerging;
     }
 
     onMotion(x, y, state) {

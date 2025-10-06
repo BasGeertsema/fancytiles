@@ -27,5 +27,11 @@
       "SUPER": "SUPER",
       "SHIFT": "SHIFT"
     }
+  },
+  "mergeAdjacentOnHover": {
+    "type": "switch",
+    "description": "Merge adjacent regions when hovering over the shared border",
+    "tooltip": "When enabled, adjacent regions will be merged when hovering over the shared border. When disabled, adjacent regions will not be merged.",
+    "default": true
   }
 }
