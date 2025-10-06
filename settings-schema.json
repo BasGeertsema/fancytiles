@@ -6,7 +6,7 @@
   },
   "enableSnappingModifiers": {
     "type": "combobox",
-    "description": "Key modifier required to activate snapping",
+    "description": "Key modifier to activate snapping",
     "default": "CTRL",
     "options": {
       "(none)": "",
@@ -18,8 +18,9 @@
   },
   "enableMultiSnappingModifiers": {
     "type": "combobox",
-    "description": "Key modifier required to activate snapping to multiple arias",
-    "default": "",
+    "description": "Key modifier to enable merging additional regions",
+    "tooltip": "When this key modifier is held down in snapping mode, all selected regions will be merged into a single region into which the window will snap",
+    "default": "ALT",
     "options": {
       "(disabled)": "",
       "CTRL": "CTRL",
@@ -30,8 +31,16 @@
   },
   "mergeAdjacentOnHover": {
     "type": "switch",
-    "description": "Merge adjacent regions when hovering over the shared border",
-    "tooltip": "When enabled, adjacent regions will be merged when hovering over the shared border. When disabled, adjacent regions will not be merged.",
+    "description": "Merge regions within the mouse radius",
+    "tooltip": "When enabled, all regions with a radius of the mouse cursor are merged into a single region into which the window will snap",
     "default": true
+  },
+  "mergingRadius": {
+    "type": "scale",
+    "description": "Radius around the mouse cursor used for merging",
+    "default": 15,
+    "min": 5,
+    "max": 50,
+    "step": 5
   }
 }

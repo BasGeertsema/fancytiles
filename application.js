@@ -275,12 +275,13 @@ class Application {
                 const enableSnappingModifiers = mapModifierSettingToModifierType(this.#settings.settingsData.enableSnappingModifiers.value);
                 const enableMultiSnappingModifiers = mapModifierSettingToModifierType(this.#settings.settingsData.enableMultiSnappingModifiers.value);
                 const enableMergeAdjacentOnHover = this.#settings.settingsData.mergeAdjacentOnHover.value;
+                const mergingRadius = this.#settings.settingsData.mergingRadius.value;
 
                 // Create WindowSnapper for each monitor
                 const nMonitors = global.display.get_n_monitors();
                 for (let i = 0; i < nMonitors; i++) {
                     const layout = this.#readOrCreateLayoutForDisplay(i, LayoutOf2x2);
-                    const snapper = new WindowSnapper(i, layout, window, enableSnappingModifiers, enableMultiSnappingModifiers, enableMergeAdjacentOnHover);
+                    const snapper = new WindowSnapper(i, layout, window, enableSnappingModifiers, enableMultiSnappingModifiers, enableMergeAdjacentOnHover, mergingRadius);
                     this.#windowSnappers.push(snapper);
                 }
             }

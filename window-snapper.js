@@ -36,9 +36,12 @@ class WindowSnapper {
     // whether to merge adjacent regions when hovering over the shared border
     #enableAdjacentMerging;
 
+    // the radius around the mouse position used for merging
+    #mergingRadius; 
+
     #signals = new SignalManager.SignalManager(null);
 
-    constructor(displayIdx, layout, window, enableSnappingModifiers, enableMultiSnappingModifiers, enableAdjacentMerging) {
+    constructor(displayIdx, layout, window, enableSnappingModifiers, enableMultiSnappingModifiers, enableAdjacentMerging, mergingRadius) {
         // the layout to use for the snapping operation
         this.#layout = layout;
 
@@ -54,7 +57,7 @@ class WindowSnapper {
         // whether to merge adjacent regions when hovering over the shared border
         this.#enableAdjacentMerging = enableAdjacentMerging;
 
-        console.log('enableAdjacentMerging', enableAdjacentMerging);
+        this.#mergingRadius = mergingRadius;
 
         // get the size of the display
         let workArea = getUsableScreenArea(displayIdx);
@@ -79,7 +82,7 @@ class WindowSnapper {
 
         // ensure the layout is correct for the snap area
         this.#layout.calculateRects(workArea.x, workArea.y, workArea.width, workArea.height);
-        this.#snappingOperation = new SnappingOperation(this.#layout, this.#enableSnappingModifiers, this.#enableMultiSnappingModifiers);
+        this.#snappingOperation = new SnappingOperation(this.#layout, this.#enableSnappingModifiers, this.#enableMultiSnappingModifiers, this.#enableAdjacentMerging, this.#mergingRadius);
 
         this.#signals.connect(this.#window, 'position-changed', this.#onWindowMoved.bind(this));
     }

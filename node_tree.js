@@ -345,6 +345,61 @@ class LayoutNode {
         return this.children.reduce((found, child) => found || child.findNodeAtPosition(x, y), null);
     }
 
+    // find all leaf nodes near the given position (for multi-zone spanning)
+    findNodesNearPosition(x, y, threshold) {
+        let nearbyNodes = [];
+        let insideNodes = [];
+
+        this.forSelfAndDescendants(node => {
+            if (!node.isLeaf()) return;
+
+            // Check if inside the node (highest priority)
+            let insideX = x >= node.rect.x && x <= node.rect.x + node.rect.width;
+            let insideY = y >= node.rect.y && y <= node.rect.y + node.rect.height;
+
+            if (insideX && insideY) {
+                insideNodes.push(node);
+                return;
+            }
+
+            // Check if position is within threshold of any edge
+            let nearLeft = Math.abs(x - node.rect.x) <= threshold;
+            let nearRight = Math.abs(x - (node.rect.x + node.rect.width)) <= threshold;
+            let nearTop = Math.abs(y - node.rect.y) <= threshold;
+            let nearBottom = Math.abs(y - (node.rect.y + node.rect.height)) <= threshold;
+
+            // Include node if position is near edges (but prioritize inside nodes)
+            if ((insideX || nearLeft || nearRight) && (insideY || nearTop || nearBottom)) {
+                nearbyNodes.push(node);
+            }
+        });
+
+        // Return inside nodes with highest priority, then nearby nodes
+        return insideNodes.length > 0 ? [...insideNodes, ...nearbyNodes] : nearbyNodes;
+    }
+
+    // check if two nodes are adjacent (share an edge)
+    areNodesAdjacent(node1, node2) {
+        if (!node1 || !node2) return false;    
+
+        // Check horizontal adjacency (left/right)
+        let horizontalOverlap = !(node1.rect.y + node1.rect.height <= node2.rect.y ||
+                                  node2.rect.y + node2.rect.height <= node1.rect.y);
+
+        let node1RightOfNode2 = Math.abs(node1.rect.x - (node2.rect.x + node2.rect.width));
+        let node2RightOfNode1 = Math.abs(node2.rect.x - (node1.rect.x + node1.rect.width));
+
+        // Check vertical adjacency (top/bottom)
+        let verticalOverlap = !(node1.rect.x + node1.rect.width <= node2.rect.x ||
+                                node2.rect.x + node2.rect.width <= node1.rect.x);
+
+        let node1BelowNode2 = Math.abs(node1.rect.y - (node2.rect.y + node2.rect.height));
+        let node2BelowNode1 = Math.abs(node2.rect.y - (node1.rect.y + node1.rect.height));
+
+        return (horizontalOverlap && (node1RightOfNode2 || node2RightOfNode1)) ||
+               (verticalOverlap && (node1BelowNode2 || node2BelowNode1));
+    }
+
     // get the rectangle of the divider for this node, useful for grabbing and moving the divider
     getDividerRect(dividerWidth) {
         dividerWidth = Math.max(dividerWidth, 2 * this.margin);
@@ -758,43 +813,54 @@ class SnappingOperation extends LayoutOperation {
     #enableSnappingModifiers;
     #enableMultiSnappingModifiers;
     #enableAdjacentMerging;
+    #mergingRadius;
     
-    constructor(tree, enableSnappingModifiers, enableMultiSnappingModifiers, enableAdjacentMerging) {
+    constructor(tree, enableSnappingModifiers, enableMultiSnappingModifiers, enableAdjacentMerging, mergingRadius) {
         super(tree);
         this.#enableSnappingModifiers = enableSnappingModifiers;
         this.#enableMultiSnappingModifiers = enableMultiSnappingModifiers;
         this.#enableAdjacentMerging = enableAdjacentMerging;
+        this.#mergingRadius = mergingRadius;        
     }
 
     onMotion(x, y, state) {
         var snappingEnabled = this.#enableSnappingModifiers.length == 0 || this.#enableSnappingModifiers.some((e) => (state & e));
-
         if (!snappingEnabled) {
             return this.cancel();
         }
-
-        const multiSnapEnabled = this.#enableMultiSnappingModifiers.some((e) => (state & e));
-
-        // Find node at mouse position
+        
         let node = this.tree.findNodeAtPosition(x, y);
-        if (!node) {
-            if(!multiSnapEnabled){
-                return this.cancel();
-            }
-
+        if(!node){
             return OperationResult.notHandled();
         }
 
-        // activate the region to snap into
-        this.showRegions = true;
-
-        if(!multiSnapEnabled) {
+        // first check for multi-region snapping using the key modifier
+        const multiSnapEnabled = this.#enableMultiSnappingModifiers.some((e) => (state & e));
+        
+        // if multi-region snapping is enabled the regions that are snapping destinations are retained
+        // this allows the user to expand the snapping region by moving around.
+        // if multi-region snapping is not enabled we first clear all snapping destinations
+        if(!multiSnapEnabled) {        
             this.tree.forSelfAndDescendants(n => {
                 n.isSnappingDestination = false;
                 n.isHighlighted = false;
             });
-            this.tree.insetNode = null;
-        } else {
+            this.tree.insetNode = null;            
+        }
+
+        // the regions in a radius around the mouse position will become snapping destinations
+        const regionSelectionRadius = this.#enableAdjacentMerging ? this.#mergingRadius : 0;        
+        
+        // find the regions with the radius and set them as snapping destinations
+        let nearbyNodes = this.tree.findNodesNearPosition(x, y, regionSelectionRadius);                
+        nearbyNodes.forEach(node => {
+            node.isSnappingDestination = true;
+            node.isHighlighted = true;
+        });
+
+        // show multi-region insetnode if there are multiple snapping destinations
+        const snappingDestinations = this.tree.findAllNodes(n => n.isSnappingDestination);
+        if(snappingDestinations.length > 1) {
             const multisnapRect = this.multisnapRect();
             if(!this.tree.insetNode){
                 this.tree.insetNode = new LayoutNode(0);
@@ -804,11 +870,11 @@ class SnappingOperation extends LayoutOperation {
                 this.tree.insetNode.isHighlighted = true;
             }            
             this.tree.insetNode.rect = multisnapRect;
+        } else {
+            this.tree.insetNode = null;
         }
-
-        node.isSnappingDestination = true;
-        node.isHighlighted = true;
-
+            
+        this.showRegions = true;
         return OperationResult.handledAndRedraw();
     }
 
@@ -851,6 +917,7 @@ class SnappingOperation extends LayoutOperation {
         if (!snapToNode) {
             return null;
         }
+
         return snapToNode.snapRect();
     }
 
