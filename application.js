@@ -75,12 +75,12 @@ function mapModifierSettingToModifierType(modifierSetting) {
             return [Clutter.ModifierType.SUPER_MASK, Clutter.ModifierType.MOD4_MASK];
         case 'SHIFT':
             return [Clutter.ModifierType.SHIFT_MASK];
-        default:            
+        default:
             return [];
     }
 }
 
-// The application class is only constructed once and is the main entry 
+// The application class is only constructed once and is the main entry
 // of the extension.
 class Application {
     // the active grid editor
@@ -132,7 +132,7 @@ class Application {
     }
 
     #loadThemeColors() {
-        // hidden element to fetch the styling    
+        // hidden element to fetch the styling
         let stylingActor = new St.DrawingArea({
             style_class: 'tile-preview tile-hud',
             visible: false
@@ -182,7 +182,7 @@ class Application {
     }
 
     #enableHotkey() {
-        this.#disableHotkey();        
+        this.#disableHotkey();
         Main.keybindingManager.addHotKey('fancytiles', this.#settings.settingsData.hotkey.value, this.#toggleEditor.bind(this));
     }
 
@@ -269,16 +269,19 @@ class Application {
     #connectWindowGrabs() {
         // start snapping when the user starts moving a window
         this.#signals.connect(global.display, 'grab-op-begin', (display, screen, window, op) => {
-            if (op === Meta.GrabOp.MOVING && window.window_type === Meta.WindowType.NORMAL) {                                
+            if (op === Meta.GrabOp.MOVING && window.window_type === Meta.WindowType.NORMAL) {
                 // reload styling
                 this.#loadThemeColors();
                 const enableSnappingModifiers = mapModifierSettingToModifierType(this.#settings.settingsData.enableSnappingModifiers.value);
-                
+                const enableMultiSnappingModifiers = mapModifierSettingToModifierType(this.#settings.settingsData.enableMultiSnappingModifiers.value);
+                const enableMergeAdjacentOnHover = this.#settings.settingsData.mergeAdjacentOnHover.value;
+                const mergingRadius = this.#settings.settingsData.mergingRadius.value;
+
                 // Create WindowSnapper for each monitor
                 const nMonitors = global.display.get_n_monitors();
                 for (let i = 0; i < nMonitors; i++) {
                     const layout = this.#readOrCreateLayoutForDisplay(i, LayoutOf2x2);
-                    const snapper = new WindowSnapper(i, layout, window, enableSnappingModifiers);
+                    const snapper = new WindowSnapper(i, layout, window, enableSnappingModifiers, enableMultiSnappingModifiers, enableMergeAdjacentOnHover, mergingRadius);
                     this.#windowSnappers.push(snapper);
                 }
             }
@@ -300,4 +303,4 @@ class Application {
     }
 }
 
-module.exports = { Application, LayoutOf2x2 }; 
+module.exports = { Application, LayoutOf2x2 };

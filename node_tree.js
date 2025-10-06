@@ -1,33 +1,33 @@
 // A layout is a tree data structure that represents the layout of snapping regions
 // on a display. Each node in the tree represents a region.
-// The internal nodes represent a partitioning (either row or column oriented) and 
+// The internal nodes represent a partitioning (either row or column oriented) and
 // the leaf nodes represent the region for a single window to snap into.
 //
 // The internal nodes, that partition the cell into multiple rows or columns,
 // can contain two or more child nodes. These child nodes can either be
 // another internal node or a leaf node.
-// 
-// Each node holds a percentage value that represents the bottom edge (y-value) or 
+//
+// Each node holds a percentage value that represents the bottom edge (y-value) or
 // right edge (x-value) of the cell as a fraction of the display width (dw) or display height (dh)
-// The percentages are NOT a fraction of the width or height of the parent node. Percentages are 
-// used instead of absolute pixel values to allow the same layout to be used on displays with 
+// The percentages are NOT a fraction of the width or height of the parent node. Percentages are
+// used instead of absolute pixel values to allow the same layout to be used on displays with
 // different resolutions.
 //
-// NEGATIVE percentages are defined as going along the y-axis (row partitioning) and 
+// NEGATIVE percentages are defined as going along the y-axis (row partitioning) and
 // POSITIVE percentages are defined as going along the x-axis (column partitioning).
-// Another perspective on this is that the x axis is positive to the right and the 
-// y axis is negative downwards. By having this convention, we can don´t have to store 
+// Another perspective on this is that the x axis is positive to the right and the
+// y axis is negative downwards. By having this convention, we can don´t have to store
 // the partition type in the node.
 //
-// For example, for a cell that has row partitioning, a value of -0.25 means that the 
+// For example, for a cell that has row partitioning, a value of -0.25 means that the
 // y-coordinate, the bottom edge of the cell, is 25% of the display height (0.25dh). For a cell that
-// has column partitioning, a value of 0.45 means that the x-coordinate, the right edge 
+// has column partitioning, a value of 0.45 means that the x-coordinate, the right edge
 // of the cell, is 45% of the screen width (0.45dw). Percentages are floating point numbers.
 //
 // The LAST child of an internal node does not have a percentage value as the right edge or
 // bottom edge is defined by the parent node. I.e. it fills the remaining space.
 //
-// The calculateRects method calculates the rectangles for all the nodes in the tree in 
+// The calculateRects method calculates the rectangles for all the nodes in the tree in
 // absolute screen coordinates.
 //
 
@@ -47,7 +47,7 @@ const LastNodeYPercentageJson = -99999;
 
 // A node in the tree layout structure
 class LayoutNode {
-    // percentage of screen width (positive) or height (negative). 
+    // percentage of screen width (positive) or height (negative).
     // Always INFINITY or NEGATIVE INFINITY for the last child.
     percentage;
 
@@ -60,10 +60,15 @@ class LayoutNode {
     // the on-screen rectangle covering the region of the node
     rect = { x: 0, y: 0, width: 0, height: 0 };
 
+    // the inset node is a fixed node that is used as a cutout for this node
+    // and its descendants when drawing. in the resulting cutout, the node is drawn.
+    // this functionality is used to draw the cutout for multi-snapping.
+    insetNode = null;
+
     // isResizing indicates if the divider belonging to this node is being moved by the user
     isResizing = false;
 
-    // isPreview indicates that this node is part of a preview split    
+    // isPreview indicates that this node is part of a preview split
     isPreview = false;
 
     // isHighlighted indicates that this node is visually highlighted
@@ -104,7 +109,7 @@ class LayoutNode {
         return clone;
     }
 
-    // revert the node to the state of the snapshotRootNode, often used 
+    // revert the node to the state of the snapshotRootNode, often used
     // on the root node to revert the whole layout to a previous state
     revert(snapshotRootNode) {
         this.percentage = snapshotRootNode.percentage;
@@ -245,8 +250,8 @@ class LayoutNode {
 
     // validate the calculated rectangles for the node and its descendants
     validateRects() {
-        // we constrain the mnimum size to a reasonable 100 pixels 
-        // as smaller is likely not what the user wants 
+        // we constrain the mnimum size to a reasonable 100 pixels
+        // as smaller is likely not what the user wants
         if (this.rect.width <= 100 || this.rect.height <= 100) {
             return false;
         }
@@ -278,8 +283,8 @@ class LayoutNode {
 
         child.parent = this;
 
-        // insert the child at the correct position/index 
-        // to maintain the sorted invariant        
+        // insert the child at the correct position/index
+        // to maintain the sorted invariant
         this.children.splice(
             this.children.findIndex(c => Math.abs(c.percentage) > Math.abs(child.percentage)),
             0,
@@ -292,6 +297,19 @@ class LayoutNode {
             return this;
         }
         return this.children.reduce((found, child) => found || child.findNode(predicate), null);
+    }
+
+    // find all node in the tree that matches the given predicate and return them in flat list
+    findAllNodes(predicate) {
+        let result = [];
+
+        this.forSelfAndDescendants((n) => {
+            if(predicate(n)) {
+                result.push(n);
+            }
+        })
+
+        return result;
     }
 
     // delete the given node in the tree if found
@@ -325,6 +343,39 @@ class LayoutNode {
 
         // find in descendants
         return this.children.reduce((found, child) => found || child.findNodeAtPosition(x, y), null);
+    }
+
+    // find all leaf nodes near the given position (for multi-zone spanning)
+    findNodesNearPosition(x, y, threshold) {
+        let nearbyNodes = [];
+        let insideNodes = [];
+
+        this.forSelfAndDescendants(node => {
+            if (!node.isLeaf()) return;
+
+            // Check if inside the node (highest priority)
+            let insideX = x >= node.rect.x && x <= node.rect.x + node.rect.width;
+            let insideY = y >= node.rect.y && y <= node.rect.y + node.rect.height;
+
+            if (insideX && insideY) {
+                insideNodes.push(node);
+                return;
+            }
+
+            // Check if position is within threshold of any edge
+            let nearLeft = Math.abs(x - node.rect.x) <= threshold;
+            let nearRight = Math.abs(x - (node.rect.x + node.rect.width)) <= threshold;
+            let nearTop = Math.abs(y - node.rect.y) <= threshold;
+            let nearBottom = Math.abs(y - (node.rect.y + node.rect.height)) <= threshold;
+
+            // Include node if position is near edges (but prioritize inside nodes)
+            if ((insideX || nearLeft || nearRight) && (insideY || nearTop || nearBottom)) {
+                nearbyNodes.push(node);
+            }
+        });
+
+        // Return inside nodes with highest priority, then nearby nodes
+        return insideNodes.length > 0 ? [...insideNodes, ...nearbyNodes] : nearbyNodes;
     }
 
     // get the rectangle of the divider for this node, useful for grabbing and moving the divider
@@ -630,7 +681,7 @@ class PreviewSplitOperation extends LayoutOperation {
     }
 
     _handlePreview(x, y, state) {
-        // Check for preview partition creation    
+        // Check for preview partition creation
         let ctrlPressed = (state & Clutter.ModifierType.CONTROL_MASK) !== 0;
         let shiftPressed = (state & Clutter.ModifierType.SHIFT_MASK) !== 0;
         let previewModeEnabled = ctrlPressed || shiftPressed;
@@ -653,9 +704,9 @@ class PreviewSplitOperation extends LayoutOperation {
             result = OperationResult.handledAndRedraw();
         }
 
-        // start a new preview if 
-        // 1) there is no preview yet and 
-        // 2) we are moving over a cell and 
+        // start a new preview if
+        // 1) there is no preview yet and
+        // 2) we are moving over a cell and
         // 3) ctrl or shift is pressed (preview mode)
         if (!previewNode
             && node && node.isLeaf()
@@ -678,7 +729,7 @@ class PreviewSplitOperation extends LayoutOperation {
 
         // move around the divider on a resizing (preview)node
         if (previewNode) {
-            // calculate the percentages  
+            // calculate the percentages
             let percentage = previewNode.isColumn() ? ((x - this.tree.rect.x) / this.tree.rect.width) : -((y - this.tree.rect.y) / this.tree.rect.height);
 
             let oldPercentage = previewNode.percentage;
@@ -700,7 +751,7 @@ class PreviewSplitOperation extends LayoutOperation {
     }
 
     _startPreview(splittingNode, percentage) {
-        // Split a leaf node into two nodes, with the given percentage as starting point           
+        // Split a leaf node into two nodes, with the given percentage as starting point
         let previewNode = new LayoutNode(percentage);
         previewNode.isPreview = true;
         previewNode.isHighlighted = true;
@@ -738,47 +789,119 @@ class PreviewSplitOperation extends LayoutOperation {
 class SnappingOperation extends LayoutOperation {
     showRegions = false;
     #enableSnappingModifiers;
+    #enableMultiSnappingModifiers;
+    #enableAdjacentMerging;
+    #mergingRadius;
 
-    constructor(tree, enableSnappingModifiers) {
+    constructor(tree, enableSnappingModifiers, enableMultiSnappingModifiers, enableAdjacentMerging, mergingRadius) {
         super(tree);
         this.#enableSnappingModifiers = enableSnappingModifiers;
+        this.#enableMultiSnappingModifiers = enableMultiSnappingModifiers;
+        this.#enableAdjacentMerging = enableAdjacentMerging;
+        this.#mergingRadius = mergingRadius;
     }
 
     onMotion(x, y, state) {
         var snappingEnabled = this.#enableSnappingModifiers.length == 0 || this.#enableSnappingModifiers.some((e) => (state & e));
-
         if (!snappingEnabled) {
             return this.cancel();
         }
 
-        // Find node at mouse position
         let node = this.tree.findNodeAtPosition(x, y);
-        if (!node) {
-            return this.cancel();
+        if(!node){
+            return OperationResult.notHandled();
         }
 
-        // activate the region to snap into
-        this.showRegions = true;
+        // first check for multi-region snapping using the key modifier
+        const multiSnapEnabled = this.#enableMultiSnappingModifiers.some((e) => (state & e));
 
-        this.tree.forSelfAndDescendants(n => {
-            n.isSnappingDestination = false;
-            n.isHighlighted = false;
+        // if multi-region snapping is enabled the regions that are snapping destinations are retained
+        // this allows the user to expand the snapping region by moving around.
+        // if multi-region snapping is not enabled we first clear all snapping destinations
+        if(!multiSnapEnabled) {
+            this.tree.forSelfAndDescendants(n => {
+                n.isSnappingDestination = false;
+                n.isHighlighted = false;
+            });
+            this.tree.insetNode = null;
+        }
+
+        // the regions in a radius around the mouse position will become snapping destinations
+        const regionSelectionRadius = this.#enableAdjacentMerging ? this.#mergingRadius : 0;
+
+        // find the regions with the radius and set them as snapping destinations
+        let nearbyNodes = this.tree.findNodesNearPosition(x, y, regionSelectionRadius);
+        nearbyNodes.forEach(node => {
+            node.isSnappingDestination = true;
+            node.isHighlighted = true;
         });
-        node.isSnappingDestination = true;
-        node.isHighlighted = true;
 
+        // show multi-region insetnode if there are multiple snapping destinations
+        const snappingDestinations = this.tree.findAllNodes(n => n.isSnappingDestination);
+        if(snappingDestinations.length > 1) {
+            const multisnapRect = this.multisnapRect();
+            if(!this.tree.insetNode){
+                this.tree.insetNode = new LayoutNode(0);
+                this.tree.insetNode.parent = this.tree;
+                this.tree.insetNode.margin = node.margin;
+                this.tree.insetNode.isSnappingDestination = true;
+                this.tree.insetNode.isHighlighted = true;
+            }
+            this.tree.insetNode.rect = multisnapRect;
+        } else {
+            this.tree.insetNode = null;
+        }
+
+        this.showRegions = true;
         return OperationResult.handledAndRedraw();
     }
 
+    multisnapRect() {
+        let snapToNodes = this.tree.findAllNodes(n => n.isSnappingDestination);
+
+        if (snapToNodes.length == 0) {
+            return null;
+        }
+
+        return snapToNodes
+            .map((n) => n.rect)
+            .reduce((rect_a, rect_b) => {
+                let min_x = Math.min(rect_a.x, rect_b.x);
+                let min_y = Math.min(rect_a.y, rect_b.y);
+                let max_x = Math.max(
+                    rect_a.x + rect_a.width,
+                    rect_b.x + rect_b.width,
+                );
+                let max_y = Math.max(
+                    rect_a.y + rect_a.height,
+                    rect_b.y + rect_b.height,
+                );
+
+                return {
+                    x: min_x,
+                    y: min_y,
+                    width: max_x - min_x,
+                    height: max_y - min_y,
+                };
+            });
+    }
+
     currentSnapToRect() {
-        var snapToNode = this.tree.findNode(n => n.isSnappingDestination);
+        if(this.tree.insetNode){
+            return this.tree.insetNode.snapRect();
+        }
+
+        const snapToNode = this.tree.findNode(n => n.isSnappingDestination);
         if (!snapToNode) {
             return null;
         }
+
         return snapToNode.snapRect();
     }
 
     cancel() {
+        this.tree.insetNode = null;
+
         if (this.showRegions) {
             this.showRegions = false;
             this.tree.forSelfAndDescendants(n => {
@@ -867,4 +990,4 @@ module.exports = {
     SnappingOperation,
     MarginsOperation,
     PresetShortcutOperation
-}; 
+};

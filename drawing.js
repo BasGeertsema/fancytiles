@@ -1,8 +1,6 @@
 // this module contains functionality to draw the layout of a node tree
 // on a given Cairo context
 
-const TAU = Math.PI * 2;
-
 // blueish default / fallback colors
 const DefaultColors = {
     background: {
@@ -25,41 +23,89 @@ const DefaultColors = {
     }
 }
 
-function drawRoundedRect(cr, rect, radius, fillColor, strokeColor) {
-    let { x, y, width, height } = rect;
+const { buildDifferencePath, polygonArea } = require('./shapes');
 
-    let drawPath = function () {
-        // Start a new path for the rounded rectangle
-        cr.newPath();
-
-        // Move to starting point
-        cr.moveTo(x + radius, y);
-
-        // Top edge and top-right corner
-        cr.lineTo(x + width - radius, y);
-        cr.arc(x + width - radius, y + radius, radius, -TAU / 4, 0);
-
-        // Right edge and bottom-right corner 
-        cr.lineTo(x + width, y + height - radius);
-        cr.arc(x + width - radius, y + height - radius, radius, 0, TAU / 4);
-
-        // Bottom edge and bottom-left corner
-        cr.lineTo(x + radius, y + height);
-        cr.arc(x + radius, y + height - radius, radius, TAU / 4, TAU / 2);
-
-        // Left edge and top-left corner
-        cr.lineTo(x, y + radius);
-        cr.arc(x + radius, y + radius, radius, TAU / 2, TAU * 3 / 4);
-
-        cr.closePath();
+function drawRoundedRect(cr, rect, radius, fillColor, strokeColor, excludedRect) {
+    const pathPoints = buildDifferencePath(rect, excludedRect);
+    if (!pathPoints || pathPoints.length < 3) {
+        return;
     }
 
-    // fill the region
+    const drawPath = function () {
+        cr.newPath();
+
+        let polygon = pathPoints.slice();
+        if (polygonArea(polygon) < 0) {
+            polygon = polygon.reverse();
+        }
+
+        const pointCount = polygon.length;
+        const cornerRadiusInput = Math.max(0, radius);
+
+        for (let i = 0; i < pointCount; i++) {
+            const prev = polygon[(i - 1 + pointCount) % pointCount];
+            const current = polygon[i];
+            const next = polygon[(i + 1) % pointCount];
+
+            let dirIn = { x: current.x - prev.x, y: current.y - prev.y };
+            let dirOut = { x: next.x - current.x, y: next.y - current.y };
+
+            const lenIn = Math.hypot(dirIn.x, dirIn.y);
+            const lenOut = Math.hypot(dirOut.x, dirOut.y);
+
+            if (lenIn === 0 || lenOut === 0) {
+                continue;
+            }
+
+            dirIn = { x: dirIn.x / lenIn, y: dirIn.y / lenIn };
+            dirOut = { x: dirOut.x / lenOut, y: dirOut.y / lenOut };
+
+            const cornerRadius = Math.min(cornerRadiusInput, lenIn / 2, lenOut / 2);
+            // trim the straight segments so the arc touches correct tangents
+            const startPoint = {
+                x: current.x - dirIn.x * cornerRadius,
+                y: current.y - dirIn.y * cornerRadius
+            };
+            const endPoint = {
+                x: current.x + dirOut.x * cornerRadius,
+                y: current.y + dirOut.y * cornerRadius
+            };
+
+            if (i === 0) {
+                cr.moveTo(startPoint.x, startPoint.y);
+            } else {
+                cr.lineTo(startPoint.x, startPoint.y);
+            }
+
+            const turn = dirIn.x * dirOut.y - dirIn.y * dirOut.x;
+
+            if (cornerRadius > 1e-6 && Math.abs(turn) > 1e-6) {
+                // center sits in the quadrant spanned by dirIn/dirOut; sign of turn decides arc direction
+                const center = {
+                    x: current.x - dirIn.x * cornerRadius + dirOut.x * cornerRadius,
+                    y: current.y - dirIn.y * cornerRadius + dirOut.y * cornerRadius
+                };
+                const startAngle = Math.atan2(startPoint.y - center.y, startPoint.x - center.x);
+                const endAngle = Math.atan2(endPoint.y - center.y, endPoint.x - center.x);
+
+                if (turn > 0) {
+                    cr.arc(center.x, center.y, cornerRadius, startAngle, endAngle);
+                } else {
+                    cr.arcNegative(center.x, center.y, cornerRadius, startAngle, endAngle);
+                }
+            } else {
+                // no curved corner here; continue with straight run
+                cr.lineTo(endPoint.x, endPoint.y);
+            }
+        }
+
+        cr.closePath();
+    };
+
     cr.setSourceRGBA(fillColor.r, fillColor.g, fillColor.b, fillColor.a);
     drawPath();
     cr.fill();
 
-    // draw the border
     cr.setSourceRGBA(strokeColor.r, strokeColor.g, strokeColor.b, strokeColor.a);
     drawPath();
     cr.stroke();
@@ -74,17 +120,27 @@ function addMargins(rect, margin) {
     }
 }
 
-function drawLayout(cr, node, displayRect, colors = DefaultColors, cornerRadius = 10) {
+function drawLayout(cr, node, displayRect, colors = DefaultColors, cornerRadius = 10, cutoutRect = null) {
     if (!node) return;
 
     // Draw current node
-    let rect = node.rect;
+    let rect = node.rect;    
 
     // Offset by monitor displayRect
     let x = rect.x - displayRect.x;
     let y = rect.y - displayRect.y;
     let width = rect.width;
     let height = rect.height;
+
+    // do we have a cutout for all children?
+    if(node.insetNode && !cutoutRect){        
+        cutoutRect = addMargins({
+            x: node.insetNode.rect.x - displayRect.x,
+            y: node.insetNode.rect.y - displayRect.y,
+            width: node.insetNode.rect.width,
+            height: node.insetNode.rect.height
+        }, -node.margin*2);
+    }
 
     // draw the region of a leaf node
     if (node.isLeaf()) {
@@ -95,12 +151,17 @@ function drawLayout(cr, node, displayRect, colors = DefaultColors, cornerRadius 
         }
         cr.setSourceRGBA(c.r, c.g, c.b, c.a);
 
-        let regionRect = addMargins({ x, y, width, height }, node.margin);
-        drawRoundedRect(cr, regionRect, cornerRadius, c, colors.border);
+        let regionRect = addMargins({ x, y, width, height }, node.margin);        
+        drawRoundedRect(cr, regionRect, cornerRadius, c, colors.border, cutoutRect);
     }
 
     for (let child of node.children) {
-        drawLayout(cr, child, displayRect, colors, cornerRadius);
+        drawLayout(cr, child, displayRect, colors, cornerRadius, cutoutRect);
+    }    
+
+    // draw the cutout once here
+    if (node.insetNode) {
+        drawLayout(cr, node.insetNode, displayRect, colors, cornerRadius, null);
     }
 }
 
