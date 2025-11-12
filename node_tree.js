@@ -792,17 +792,30 @@ class SnappingOperation extends LayoutOperation {
     #enableMultiSnappingModifiers;
     #enableAdjacentMerging;
     #mergingRadius;
+    #activateWithNonPrimaryButton;
 
-    constructor(tree, enableSnappingModifiers, enableMultiSnappingModifiers, enableAdjacentMerging, mergingRadius) {
+    constructor(tree, enableSnappingModifiers, enableMultiSnappingModifiers, enableAdjacentMerging, mergingRadius, activateWithNonPrimaryButton) {
         super(tree);
         this.#enableSnappingModifiers = enableSnappingModifiers;
         this.#enableMultiSnappingModifiers = enableMultiSnappingModifiers;
         this.#enableAdjacentMerging = enableAdjacentMerging;
         this.#mergingRadius = mergingRadius;
+        this.#activateWithNonPrimaryButton = activateWithNonPrimaryButton;
     }
 
     onMotion(x, y, state) {
-        var snappingEnabled = this.#enableSnappingModifiers.length == 0 || this.#enableSnappingModifiers.some((e) => (state & e));
+        let snappingEnabled;
+
+        if (this.#activateWithNonPrimaryButton) {
+            // Check if the secondary button is pressed (button 3 mask)
+            // In Clutter/Mutter, BUTTON3_MASK represents the secondary button
+            const Clutter = imports.gi.Clutter;
+            snappingEnabled = (state & Clutter.ModifierType.BUTTON3_MASK);
+        } else {
+            // Use the keyboard modifiers as before
+            snappingEnabled = this.#enableSnappingModifiers.length == 0 || this.#enableSnappingModifiers.some((e) => (state & e));
+        }
+
         if (!snappingEnabled) {
             return this.cancel();
         }

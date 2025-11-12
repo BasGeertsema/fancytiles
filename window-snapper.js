@@ -37,11 +37,14 @@ class WindowSnapper {
     #enableAdjacentMerging;
 
     // the radius around the mouse position used for merging
-    #mergingRadius; 
+    #mergingRadius;
+
+    // whether to use the non-primary button to activate snapping
+    #activateWithNonPrimaryButton;
 
     #signals = new SignalManager.SignalManager(null);
 
-    constructor(displayIdx, layout, window, enableSnappingModifiers, enableMultiSnappingModifiers, enableAdjacentMerging, mergingRadius) {
+    constructor(displayIdx, layout, window, enableSnappingModifiers, enableMultiSnappingModifiers, enableAdjacentMerging, mergingRadius, activateWithNonPrimaryButton) {
         // the layout to use for the snapping operation
         this.#layout = layout;
 
@@ -58,6 +61,9 @@ class WindowSnapper {
         this.#enableAdjacentMerging = enableAdjacentMerging;
 
         this.#mergingRadius = mergingRadius;
+
+        // whether to use the non-primary button to activate snapping
+        this.#activateWithNonPrimaryButton = activateWithNonPrimaryButton;
 
         // get the size of the display
         let workArea = getUsableScreenArea(displayIdx);
@@ -82,7 +88,7 @@ class WindowSnapper {
 
         // ensure the layout is correct for the snap area
         this.#layout.calculateRects(workArea.x, workArea.y, workArea.width, workArea.height);
-        this.#snappingOperation = new SnappingOperation(this.#layout, this.#enableSnappingModifiers, this.#enableMultiSnappingModifiers, this.#enableAdjacentMerging, this.#mergingRadius);
+        this.#snappingOperation = new SnappingOperation(this.#layout, this.#enableSnappingModifiers, this.#enableMultiSnappingModifiers, this.#enableAdjacentMerging, this.#mergingRadius, this.#activateWithNonPrimaryButton);
 
         this.#signals.connect(this.#window, 'position-changed', this.#onWindowMoved.bind(this));
     }

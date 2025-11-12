@@ -42,5 +42,11 @@
     "min": 5,
     "max": 50,
     "step": 5
+  },
+  "activateWithNonPrimaryButton": {
+    "type": "switch",
+    "description": "Activate snapping with secondary mouse button",
+    "tooltip": "When enabled, holding the secondary (non-primary) mouse button activates snapping instead of using a keyboard modifier",
+    "default": false
   }
 }
