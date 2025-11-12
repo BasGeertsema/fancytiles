@@ -806,15 +806,12 @@ class SnappingOperation extends LayoutOperation {
     onMotion(x, y, state) {
         let snappingEnabled;
 
-        if (this.#activateWithNonPrimaryButton) {
-            // Check if the secondary button is pressed (button 3 mask)
-            // In Clutter/Mutter, BUTTON3_MASK represents the secondary button
-            const Clutter = imports.gi.Clutter;
-            snappingEnabled = (state & Clutter.ModifierType.BUTTON3_MASK);
-        } else {
-            // Use the keyboard modifiers as before
-            snappingEnabled = this.#enableSnappingModifiers.length == 0 || this.#enableSnappingModifiers.some((e) => (state & e));
-        }
+        const Clutter = imports.gi.Clutter;
+        const secondaryButtonPressed = (state & Clutter.ModifierType.BUTTON3_MASK);
+        const modifierPressed = this.#enableSnappingModifiers.some((e) => (state & e));
+        const noModifierRequired = this.#enableSnappingModifiers.length == 0 && !this.#activateWithNonPrimaryButton;
+
+        snappingEnabled = secondaryButtonPressed || modifierPressed || noModifierRequired;
 
         if (!snappingEnabled) {
             return this.cancel();

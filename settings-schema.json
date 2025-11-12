@@ -7,6 +7,7 @@
   "enableSnappingModifiers": {
     "type": "combobox",
     "description": "Key modifier to activate snapping",
+    "tooltip": "When set, holding the key modifier while dragging activates snapping mode. Snapping mode is always activated when both the key modifier is set to (none) and activating with the secondary mouse button is disabled.",
     "default": "CTRL",
     "options": {
       "(none)": "",
@@ -16,6 +17,12 @@
       "SHIFT": "SHIFT"
     }
   },
+  "activateWithNonPrimaryButton": {
+    "type": "switch",
+    "description": "Activate snapping with secondary mouse button",
+    "tooltip": "When enabled, holding the secondary mouse button while dragging activates snapping mode. Snapping mode is always activated when both the key modifier is set to (none) and activating with the secondary mouse button is disabled.",
+    "default": false
+  },  
   "enableMultiSnappingModifiers": {
     "type": "combobox",
     "description": "Key modifier to enable merging additional regions",
@@ -42,11 +49,5 @@
     "min": 5,
     "max": 50,
     "step": 5
-  },
-  "activateWithNonPrimaryButton": {
-    "type": "switch",
-    "description": "Activate snapping with secondary mouse button",
-    "tooltip": "When enabled, holding the secondary (non-primary) mouse button activates snapping instead of using a keyboard modifier",
-    "default": false
   }
 }
