@@ -792,17 +792,27 @@ class SnappingOperation extends LayoutOperation {
     #enableMultiSnappingModifiers;
     #enableAdjacentMerging;
     #mergingRadius;
+    #activateWithNonPrimaryButton;
 
-    constructor(tree, enableSnappingModifiers, enableMultiSnappingModifiers, enableAdjacentMerging, mergingRadius) {
+    constructor(tree, enableSnappingModifiers, enableMultiSnappingModifiers, enableAdjacentMerging, mergingRadius, activateWithNonPrimaryButton) {
         super(tree);
         this.#enableSnappingModifiers = enableSnappingModifiers;
         this.#enableMultiSnappingModifiers = enableMultiSnappingModifiers;
         this.#enableAdjacentMerging = enableAdjacentMerging;
         this.#mergingRadius = mergingRadius;
+        this.#activateWithNonPrimaryButton = activateWithNonPrimaryButton;
     }
 
     onMotion(x, y, state) {
-        var snappingEnabled = this.#enableSnappingModifiers.length == 0 || this.#enableSnappingModifiers.some((e) => (state & e));
+        let snappingEnabled;
+
+        const Clutter = imports.gi.Clutter;
+        const secondaryButtonPressed = (state & Clutter.ModifierType.BUTTON3_MASK);
+        const modifierPressed = this.#enableSnappingModifiers.some((e) => (state & e));
+        const noModifierRequired = this.#enableSnappingModifiers.length == 0 && !this.#activateWithNonPrimaryButton;
+
+        snappingEnabled = secondaryButtonPressed || modifierPressed || noModifierRequired;
+
         if (!snappingEnabled) {
             return this.cancel();
         }
