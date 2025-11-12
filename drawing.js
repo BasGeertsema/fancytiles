@@ -139,7 +139,7 @@ function drawLayout(cr, node, displayRect, colors = DefaultColors, cornerRadius 
             y: node.insetNode.rect.y - displayRect.y,
             width: node.insetNode.rect.width,
             height: node.insetNode.rect.height
-        }, -node.margin*2);
+        }, -node.insetNode.margin);
     }
 
     // draw the region of a leaf node
