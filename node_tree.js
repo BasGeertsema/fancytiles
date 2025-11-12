@@ -811,7 +811,7 @@ class SnappingOperation extends LayoutOperation {
         const modifierPressed = this.#enableSnappingModifiers.some((e) => (state & e));
         const noModifierRequired = this.#enableSnappingModifiers.length == 0 && !this.#activateWithNonPrimaryButton;
 
-        snappingEnabled = secondaryButtonPressed || modifierPressed || noModifierRequired;
+        snappingEnabled = (this.#activateWithNonPrimaryButton && secondaryButtonPressed) || modifierPressed || noModifierRequired;
 
         if (!snappingEnabled) {
             return this.cancel();
