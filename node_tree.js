@@ -809,24 +809,41 @@ class SnappingOperation extends LayoutOperation {
             return this.cancel();
         }
 
-        // Find nodes near mouse position for multi-zone spanning
-        let nearbyNodes = this.tree.findNodesNearPosition(x, y);
-        if (!nearbyNodes || nearbyNodes.length === 0) {
-            return this.cancel();
-        }
+        // Check if cursor is near the screen edge — fullscreen snap
+        let edgeThreshold = 30;
+        let r = this.tree.rect;
+        let nearEdge = (x >= r.x && y >= r.y && x <= r.x + r.width && y <= r.y + r.height) &&
+            ((x - r.x < edgeThreshold) ||
+             (r.x + r.width - x < edgeThreshold) ||
+             (y - r.y < edgeThreshold) ||
+             (r.y + r.height - y < edgeThreshold));
 
-        // Determine which nodes should be highlighted
         let newSnapNodes = [];
-        if (nearbyNodes.length > 1) {
-            let mainNode = nearbyNodes[0];
-            newSnapNodes.push(mainNode);
-            for (let i = 1; i < nearbyNodes.length; i++) {
-                if (this.tree.areNodesAdjacent(mainNode, nearbyNodes[i])) {
-                    newSnapNodes.push(nearbyNodes[i]);
-                }
-            }
+
+        if (nearEdge) {
+            // Highlight all leaf nodes for fullscreen snap
+            this.tree.forSelfAndDescendants(n => {
+                if (n.isLeaf()) newSnapNodes.push(n);
+            });
         } else {
-            newSnapNodes.push(nearbyNodes[0]);
+            // Find nodes near mouse position for multi-zone spanning
+            let nearbyNodes = this.tree.findNodesNearPosition(x, y);
+            if (!nearbyNodes || nearbyNodes.length === 0) {
+                return this.cancel();
+            }
+
+            // Determine which nodes should be highlighted
+            if (nearbyNodes.length > 1) {
+                let mainNode = nearbyNodes[0];
+                newSnapNodes.push(mainNode);
+                for (let i = 1; i < nearbyNodes.length; i++) {
+                    if (this.tree.areNodesAdjacent(mainNode, nearbyNodes[i])) {
+                        newSnapNodes.push(nearbyNodes[i]);
+                    }
+                }
+            } else {
+                newSnapNodes.push(nearbyNodes[0]);
+            }
         }
 
         // Skip repaint if the same nodes are already highlighted
