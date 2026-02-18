@@ -795,6 +795,7 @@ class PreviewSplitOperation extends LayoutOperation {
 class SnappingOperation extends LayoutOperation {
     showRegions = false;
     #enableSnappingModifiers;
+    #previousSnapNodes = [];
 
     constructor(tree, enableSnappingModifiers) {
         super(tree);
@@ -814,36 +815,39 @@ class SnappingOperation extends LayoutOperation {
             return this.cancel();
         }
 
-        // Reset all snapping destinations and highlighting
+        // Determine which nodes should be highlighted
+        let newSnapNodes = [];
+        if (nearbyNodes.length > 1) {
+            let mainNode = nearbyNodes[0];
+            newSnapNodes.push(mainNode);
+            for (let i = 1; i < nearbyNodes.length; i++) {
+                if (this.tree.areNodesAdjacent(mainNode, nearbyNodes[i])) {
+                    newSnapNodes.push(nearbyNodes[i]);
+                }
+            }
+        } else {
+            newSnapNodes.push(nearbyNodes[0]);
+        }
+
+        // Skip repaint if the same nodes are already highlighted
+        if (this.showRegions
+            && newSnapNodes.length === this.#previousSnapNodes.length
+            && newSnapNodes.every(n => this.#previousSnapNodes.indexOf(n) !== -1)) {
+            return OperationResult.handled();
+        }
+
+        // Highlighted zones changed — reset and update
         this.tree.forSelfAndDescendants(n => {
             n.isSnappingDestination = false;
             n.isHighlighted = false;
         });
 
-        // For multi-zone spanning, check if nodes are adjacent
-        if (nearbyNodes.length > 1) {
-            let adjacentNodes = [];
-            let mainNode = nearbyNodes[0]; // The primary node
-            adjacentNodes.push(mainNode);
+        newSnapNodes.forEach(node => {
+            node.isSnappingDestination = true;
+            node.isHighlighted = true;
+        });
 
-            // Find all nodes adjacent to the main node
-            for (let i = 1; i < nearbyNodes.length; i++) {
-                if (this.tree.areNodesAdjacent(mainNode, nearbyNodes[i])) {
-                    adjacentNodes.push(nearbyNodes[i]);
-                }
-            }
-
-            // Set all adjacent nodes as snapping destinations
-            adjacentNodes.forEach(node => {
-                node.isSnappingDestination = true;
-                node.isHighlighted = true;
-            });
-        } else {
-            // Single zone
-            nearbyNodes[0].isSnappingDestination = true;
-            nearbyNodes[0].isHighlighted = true;
-        }
-
+        this.#previousSnapNodes = newSnapNodes;
         this.showRegions = true;
         return OperationResult.handledAndRedraw();
     }
@@ -894,6 +898,7 @@ class SnappingOperation extends LayoutOperation {
     cancel() {
         if (this.showRegions) {
             this.showRegions = false;
+            this.#previousSnapNodes = [];
             this.tree.forSelfAndDescendants(n => {
                 n.isSnappingDestination = false;
                 n.isHighlighted = false;

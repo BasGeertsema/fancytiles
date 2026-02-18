@@ -355,8 +355,8 @@ class GridEditor {
         // Get the actor coordinates relative to its parent
         let [actorX, actorY] = area.get_transformed_position();
 
-        // Draw the layout
-        drawLayout(cr, tree, { x: actorX, y: actorY }, this.#colors);
+        // Draw the layout (with zone info in editor mode)
+        drawLayout(cr, tree, { x: actorX, y: actorY }, this.#colors, 10, { count: 0 }, true);
 
         cr.$dispose();
     }
