@@ -47,7 +47,7 @@
     "description": "Radius around the mouse cursor used for merging",
     "default": 15,
     "min": 5,
-    "max": 50,
+    "max": 150,
     "step": 5
   }
 }
