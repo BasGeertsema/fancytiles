@@ -793,6 +793,8 @@ class SnappingOperation extends LayoutOperation {
     #enableAdjacentMerging;
     #mergingRadius;
     #activateWithNonPrimaryButton;
+    #previousHighlightedNodes = null;
+    #previousInsetNodeRect = null;
 
     constructor(tree, enableSnappingModifiers, enableMultiSnappingModifiers, enableAdjacentMerging, mergingRadius, activateWithNonPrimaryButton) {
         super(tree);
@@ -862,8 +864,37 @@ class SnappingOperation extends LayoutOperation {
             this.tree.insetNode = null;
         }
 
+        // Only redraw if the visual state actually changed (highlighted nodes or inset rect).
+        // This avoids repainting on every position-changed event while the mouse stays
+        // within the same region.
+        const currentHighlighted = new Set(this.tree.findAllNodes(n => n.isHighlighted));
+        const insetRect = this.tree.insetNode ? this.tree.insetNode.rect : null;
+
+        let changed = this.#previousHighlightedNodes === null ||
+            currentHighlighted.size !== this.#previousHighlightedNodes.size ||
+            [...currentHighlighted].some(n => !this.#previousHighlightedNodes.has(n));
+
+        if (!changed) {
+            const prev = this.#previousInsetNodeRect;
+            if (insetRect) {
+                changed = !prev ||
+                    prev.x !== insetRect.x || prev.y !== insetRect.y ||
+                    prev.width !== insetRect.width || prev.height !== insetRect.height;
+            } else {
+                changed = prev !== null;
+            }
+        }
+
+        this.#previousHighlightedNodes = currentHighlighted;
+        this.#previousInsetNodeRect = insetRect
+            ? { x: insetRect.x, y: insetRect.y, width: insetRect.width, height: insetRect.height }
+            : null;
+
         this.showRegions = true;
-        return OperationResult.handledAndRedraw();
+        if (changed) {
+            return OperationResult.handledAndRedraw();
+        }
+        return OperationResult.handled();
     }
 
     multisnapRect() {
@@ -911,6 +942,8 @@ class SnappingOperation extends LayoutOperation {
 
     cancel() {
         this.tree.insetNode = null;
+        this.#previousHighlightedNodes = null;
+        this.#previousInsetNodeRect = null;
 
         if (this.showRegions) {
             this.showRegions = false;
