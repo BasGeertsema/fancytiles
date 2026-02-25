@@ -42,6 +42,12 @@
     "tooltip": "When enabled, all regions with a radius of the mouse cursor are merged into a single region into which the window will snap",
     "default": true
   },
+  "showGuideLines": {
+    "type": "switch",
+    "description": "Show guide lines in the grid editor",
+    "tooltip": "When enabled, guide lines at 1/3, 1/2 and 2/3 are shown in the grid editor when splitting a region",
+    "default": true
+  },
   "mergingRadius": {
     "type": "scale",
     "description": "Radius around the mouse cursor used for merging",

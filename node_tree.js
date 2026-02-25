@@ -638,9 +638,11 @@ class ResizeOperation extends LayoutOperation {
 // the user can preview a split in the layout
 class PreviewSplitOperation extends LayoutOperation {
     prePreviewSnapshot = null;
+    #showGuideLines;
 
-    constructor(tree) {
+    constructor(tree, screenWidth, screenHeight, showGuideLines) {
         super(tree);
+        this.#showGuideLines = showGuideLines;
     }
 
     onMotion(x, y, state) {
@@ -733,19 +735,21 @@ class PreviewSplitOperation extends LayoutOperation {
             let percentage = previewNode.isColumn() ? ((x - this.tree.rect.x) / this.tree.rect.width) : -((y - this.tree.rect.y) / this.tree.rect.height);
 
             // Snap to 1/3, 1/2, or 2/3 of the region being split (within 3% of the region)
-            const regionRect = previewNode.splitGuideRect || previewNode.parent.rect;
-            const isColumn = previewNode.isColumn();
-            const screenSize = isColumn ? this.tree.rect.width : this.tree.rect.height;
-            const screenOffset = isColumn ? this.tree.rect.x : this.tree.rect.y;
-            const regionStart = isColumn ? regionRect.x : regionRect.y;
-            const regionSize = isColumn ? regionRect.width : regionRect.height;
-            const snapPoints = [1/3, 1/2, 2/3];
-            for (const snap of snapPoints) {
-                const snapScreenPos = regionStart + regionSize * snap;
-                const snapPercentage = ((snapScreenPos - screenOffset) / screenSize) * (isColumn ? 1 : -1);
-                if (Math.abs(percentage - snapPercentage) <= 0.03 * (regionSize / screenSize)) {
-                    percentage = snapPercentage;
-                    break;
+            if (this.#showGuideLines) {
+                const regionRect = previewNode.splitGuideRect || previewNode.parent.rect;
+                const isColumn = previewNode.isColumn();
+                const screenSize = isColumn ? this.tree.rect.width : this.tree.rect.height;
+                const screenOffset = isColumn ? this.tree.rect.x : this.tree.rect.y;
+                const regionStart = isColumn ? regionRect.x : regionRect.y;
+                const regionSize = isColumn ? regionRect.width : regionRect.height;
+                const snapPoints = [1/3, 1/2, 2/3];
+                for (const snap of snapPoints) {
+                    const snapScreenPos = regionStart + regionSize * snap;
+                    const snapPercentage = ((snapScreenPos - screenOffset) / screenSize) * (isColumn ? 1 : -1);
+                    if (Math.abs(percentage - snapPercentage) <= 0.03 * (regionSize / screenSize)) {
+                        percentage = snapPercentage;
+                        break;
+                    }
                 }
             }
 

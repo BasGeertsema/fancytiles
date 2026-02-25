@@ -37,18 +37,22 @@ class GridEditor {
     // the callback to call when the editor is closed
     #onClose;
 
+    // whether to show guide lines when splitting
+    #showGuideLines;
+
     // operations on the layout tree
     #marginsOperation;
     #previewOperation;
     #resizeOperation;
     #presetShortcutOperation;
 
-    constructor(displayIdx, layoutTree, colors, onClose, presets) {
+    constructor(displayIdx, layoutTree, colors, onClose, presets, showGuideLines) {
         this.#displayIdx = displayIdx;
         this.#layoutTree = layoutTree;
         this.#colors = colors;
         this.#onClose = onClose;
         this.#presets = presets;
+        this.#showGuideLines = showGuideLines;
 
         // get the working area to occupy as a grid editor   
         // and resize the layout to fit the work area
@@ -80,7 +84,7 @@ class GridEditor {
         this.#presetTextColor = this.#loadPresetDialog.get_theme_node().get_foreground_color();
 
         // the operations to do when in the grid editor
-        this.#previewOperation = new PreviewSplitOperation(this.#layoutTree, this.#workArea.width, this.#workArea.height);
+        this.#previewOperation = new PreviewSplitOperation(this.#layoutTree, this.#workArea.width, this.#workArea.height, this.#showGuideLines);
         this.#resizeOperation = new ResizeOperation(this.#layoutTree, this.#workArea.width, this.#workArea.height);
         this.#marginsOperation = new MarginsOperation(this.#layoutTree);
         this.#presetShortcutOperation = new PresetShortcutOperation(this.#layoutTree, this.#presets, this.#usePreset.bind(this));
@@ -360,7 +364,7 @@ class GridEditor {
 
         // Draw split guide lines at 1/3, 1/2, and 2/3 of the region being split
         const previewNode = tree.findNode(n => n.isPreview);
-        if (previewNode && previewNode.parent) {
+        if (this.#showGuideLines && previewNode && previewNode.parent) {
             const parentRect = previewNode.splitGuideRect || previewNode.parent.rect;
             const isColumn = previewNode.isColumn();
 
