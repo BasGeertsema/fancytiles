@@ -37,18 +37,22 @@ class GridEditor {
     // the callback to call when the editor is closed
     #onClose;
 
+    // whether to show guide lines when splitting
+    #showGuideLines;
+
     // operations on the layout tree
     #marginsOperation;
     #previewOperation;
     #resizeOperation;
     #presetShortcutOperation;
 
-    constructor(displayIdx, layoutTree, colors, onClose, presets) {
+    constructor(displayIdx, layoutTree, colors, onClose, presets, showGuideLines) {
         this.#displayIdx = displayIdx;
         this.#layoutTree = layoutTree;
         this.#colors = colors;
         this.#onClose = onClose;
         this.#presets = presets;
+        this.#showGuideLines = showGuideLines;
 
         // get the working area to occupy as a grid editor   
         // and resize the layout to fit the work area
@@ -80,7 +84,7 @@ class GridEditor {
         this.#presetTextColor = this.#loadPresetDialog.get_theme_node().get_foreground_color();
 
         // the operations to do when in the grid editor
-        this.#previewOperation = new PreviewSplitOperation(this.#layoutTree, this.#workArea.width, this.#workArea.height);
+        this.#previewOperation = new PreviewSplitOperation(this.#layoutTree, this.#workArea.width, this.#workArea.height, this.#showGuideLines);
         this.#resizeOperation = new ResizeOperation(this.#layoutTree, this.#workArea.width, this.#workArea.height);
         this.#marginsOperation = new MarginsOperation(this.#layoutTree);
         this.#presetShortcutOperation = new PresetShortcutOperation(this.#layoutTree, this.#presets, this.#usePreset.bind(this));
@@ -357,6 +361,41 @@ class GridEditor {
 
         // Draw the layout
         drawLayout(cr, tree, { x: actorX, y: actorY }, this.#colors);
+
+        // Draw split guide lines at 1/3, 1/2, and 2/3 of the region being split
+        const previewNode = tree.findNode(n => n.isPreview);
+        if (this.#showGuideLines && previewNode && previewNode.parent) {
+            const parentRect = previewNode.splitGuideRect || previewNode.parent.rect;
+            const isColumn = previewNode.isColumn();
+
+            cr.save();
+            const bc = this.#colors.border;
+            cr.setSourceRGBA(bc.r, bc.g, bc.b, 0.35);
+            cr.setLineWidth(1.5);
+            cr.setDash([3, 6], 0);
+            cr.setLineCap(Cairo.LineCap.ROUND);
+
+            const margin = previewNode.margin;
+            const px = parentRect.x - actorX;
+            const py = parentRect.y - actorY;
+            const pw = parentRect.width;
+            const ph = parentRect.height;
+
+            for (const frac of [1/3, 0.5, 2/3]) {
+                if (isColumn) {
+                    const lineX = px + pw * frac;
+                    cr.moveTo(lineX, py + margin);
+                    cr.lineTo(lineX, py + ph - margin);
+                } else {
+                    const lineY = py + ph * frac;
+                    cr.moveTo(px + margin, lineY);
+                    cr.lineTo(px + pw - margin, lineY);
+                }
+                cr.stroke();
+            }
+
+            cr.restore();
+        }
 
         cr.$dispose();
     }

@@ -211,7 +211,7 @@ class LayoutNode {
             let axis = child.axis();
 
             // calculate the position of the edge along the axis
-            let posOnAxis = displayOnAxis[axis] + Math.round(Math.abs(screenLength[axis] * child.percentage) / 10) * 10;
+            let posOnAxis = displayOnAxis[axis] + Math.round(Math.abs(screenLength[axis] * child.percentage));
 
             if (axis === AxisX) {
                 // child is a column node
@@ -638,9 +638,11 @@ class ResizeOperation extends LayoutOperation {
 // the user can preview a split in the layout
 class PreviewSplitOperation extends LayoutOperation {
     prePreviewSnapshot = null;
+    #showGuideLines;
 
-    constructor(tree) {
+    constructor(tree, screenWidth, screenHeight, showGuideLines) {
         super(tree);
+        this.#showGuideLines = showGuideLines;
     }
 
     onMotion(x, y, state) {
@@ -732,6 +734,25 @@ class PreviewSplitOperation extends LayoutOperation {
             // calculate the percentages
             let percentage = previewNode.isColumn() ? ((x - this.tree.rect.x) / this.tree.rect.width) : -((y - this.tree.rect.y) / this.tree.rect.height);
 
+            // Snap to 1/3, 1/2, or 2/3 of the region being split (within 3% of the region)
+            if (this.#showGuideLines) {
+                const regionRect = previewNode.splitGuideRect || previewNode.parent.rect;
+                const isColumn = previewNode.isColumn();
+                const screenSize = isColumn ? this.tree.rect.width : this.tree.rect.height;
+                const screenOffset = isColumn ? this.tree.rect.x : this.tree.rect.y;
+                const regionStart = isColumn ? regionRect.x : regionRect.y;
+                const regionSize = isColumn ? regionRect.width : regionRect.height;
+                const snapPoints = [1/3, 1/2, 2/3];
+                for (const snap of snapPoints) {
+                    const snapScreenPos = regionStart + regionSize * snap;
+                    const snapPercentage = ((snapScreenPos - screenOffset) / screenSize) * (isColumn ? 1 : -1);
+                    if (Math.abs(percentage - snapPercentage) <= 0.03 * (regionSize / screenSize)) {
+                        percentage = snapPercentage;
+                        break;
+                    }
+                }
+            }
+
             let oldPercentage = previewNode.percentage;
             previewNode.percentage = percentage;
 
@@ -758,6 +779,9 @@ class PreviewSplitOperation extends LayoutOperation {
         previewNode.margin = splittingNode.margin;
 
         if (previewNode.axis() === splittingNode.axis() && splittingNode.parent) {
+            // Store the original splitting node's rect before rects are recalculated,
+            // so the guide lines in the grid editor can reference the correct region.
+            previewNode.splitGuideRect = { x: splittingNode.rect.x, y: splittingNode.rect.y, width: splittingNode.rect.width, height: splittingNode.rect.height };
             // request the parent to insert a new node
             splittingNode.parent.insertChild(previewNode);
             splittingNode.isHighlighted = true;

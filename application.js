@@ -235,12 +235,15 @@ class Application {
             this.#loadPresets();
         }
 
+        const showGuideLines = this.#settings.settingsData.showGuideLines.value;
+
         this.#gridEditor = new GridEditor(
             displayIdx,
             layout,
             this.#colors,
             this.#closeEditor.bind(this),
-            this.#presets
+            this.#presets,
+            showGuideLines
         );
     }
 
