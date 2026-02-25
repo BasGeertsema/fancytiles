@@ -358,6 +358,41 @@ class GridEditor {
         // Draw the layout
         drawLayout(cr, tree, { x: actorX, y: actorY }, this.#colors);
 
+        // Draw split guide lines at 1/3, 1/2, and 2/3 of the region being split
+        const previewNode = tree.findNode(n => n.isPreview);
+        if (previewNode && previewNode.parent) {
+            const parentRect = previewNode.splitGuideRect || previewNode.parent.rect;
+            const isColumn = previewNode.isColumn();
+
+            cr.save();
+            const bc = this.#colors.border;
+            cr.setSourceRGBA(bc.r, bc.g, bc.b, 0.35);
+            cr.setLineWidth(1.5);
+            cr.setDash([3, 6], 0);
+            cr.setLineCap(Cairo.LineCap.ROUND);
+
+            const margin = previewNode.margin;
+            const px = parentRect.x - actorX;
+            const py = parentRect.y - actorY;
+            const pw = parentRect.width;
+            const ph = parentRect.height;
+
+            for (const frac of [1/3, 0.5, 2/3]) {
+                if (isColumn) {
+                    const lineX = px + pw * frac;
+                    cr.moveTo(lineX, py + margin);
+                    cr.lineTo(lineX, py + ph - margin);
+                } else {
+                    const lineY = py + ph * frac;
+                    cr.moveTo(px + margin, lineY);
+                    cr.lineTo(px + pw - margin, lineY);
+                }
+                cr.stroke();
+            }
+
+            cr.restore();
+        }
+
         cr.$dispose();
     }
 
