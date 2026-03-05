@@ -1,6 +1,5 @@
 const Cairo = imports.cairo;
 const Clutter = imports.gi.Clutter;
-const Dialog = imports.ui.dialog;
 const Main = imports.ui.main;
 const St = imports.gi.St;
 
@@ -259,26 +258,22 @@ class GridEditor {
 
 
     #createInfoDialog() {
-        // Calculate center position        
-        let dialogWidth = 600;
-        let dialogHeight = 600;
-
-        let dialogX = this.#workArea.x + ((this.#workArea.width - dialogWidth) / 2);  // Center horizontally
-        let dialogY = this.#workArea.y + ((this.#workArea.height - dialogHeight) / 2); // Center vertically
-
-        let dialog = new Dialog.Dialog(Main.uiGroup);
-        dialog.set_position(dialogX, dialogY);
+        let dialogWidth = 620;
+        let dialogHeight = 220;
+        let dialogX = this.#workArea.x + ((this.#workArea.width - dialogWidth) / 2);
+        let dialogY = this.#workArea.y + ((this.#workArea.height - dialogHeight) / 2);
+        let dialog = new St.BoxLayout({
+            reactive: true, can_focus: true,
+            style_class: 'dialog', vertical: true
+        });
         dialog.set_size(dialogWidth, dialogHeight);
-        dialog.contentLayout.add_child(new Dialog.MessageDialogContent({
-            title: null,
-            description:
-                "<CTRL> / <SHIFT> = Divide in columns / rows\n" +
-                "Drag divider to resize\nRight click = delete divider\n" +
-                "<Page Up> / <Page Down> = Increase / Decrease spacing\n" +
-                "<SPACE> / <ALT> = Load / save user preset\n" +
-                "[1-8] = Load preset\n" +
-                "<ESC> = Close editor"
-        }));
+        dialog.set_position(dialogX, dialogY);
+        dialog.add(new St.Label({ text: 'Fancy Tiles Key Bindings', style_class: 'confirm-dialog-title' }));
+        let text = "<CTRL>/<SHIFT> = Split columns/rows  |  Drag divider to resize\n"
+                 + "Right click = delete divider  |  <Page Up/Down> = spacing\n"
+                 + "<SPACE>/<ALT> = Load/save preset  |  [1-8] = Load preset\n"
+                 + "<ESC> = Close editor";
+        dialog.add(new St.Label({ text: text, style_class: 'dialog-content-box' }));
         return dialog;
     }
 
