@@ -147,10 +147,27 @@ class WindowSnapper {
 
         let [x, y, state] = global.get_pointer();
 
+        // Check if the pointer is within this snapper's monitor area
+        let cX = this.#container.get_x();
+        let cY = this.#container.get_y();
+        let cW = this.#container.get_width();
+        let cH = this.#container.get_height();
+        let pointerInBounds = (x >= cX && x <= cX + cW && y >= cY && y <= cY + cH);
+
+        if (!pointerInBounds) {
+            // Hide overlay and cancel highlights when pointer leaves this monitor
+            this.#container.hide();
+            this.#snappingOperation.cancel();
+            this.#drawingArea.queue_repaint();
+            return;
+        }
+
         let result = this.#snappingOperation.onMotion(x, y, state);
         if (result && result.shouldRedraw) {
             if (this.#snappingOperation.showRegions) {
                 this.#container.show();
+            } else {
+                this.#container.hide();
             }
             this.#drawingArea.queue_repaint();
         }
