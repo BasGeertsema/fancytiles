@@ -288,7 +288,7 @@ class Application {
         this.#loadThemeColors();
         this.#dragSession = new DragSession({
             window,
-            layoutFor: (i) => this.#readOrCreateLayoutForDisplay(i, LayoutOf2x2),
+            layoutFor: (i) => this.#readOrCreateLayoutForDisplay(i, LayoutOf2x2.clone()),
             options: this.#snapshotDragOptions(),
         });
     }
