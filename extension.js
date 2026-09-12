@@ -5,18 +5,24 @@
 
 const { Application } = require('./application');
 
-const UUID = 'fancytiles@basgeertsema';
+// Cinnamon calls init(meta) before enable() (which itself takes no arguments), so the uuid
+// -- and with it, the per-installation config directory in LayoutIO -- must be captured here
+// rather than hardcoded. Cinnamon enforces meta.uuid === the extension's own directory name,
+// so this also transparently supports running a differently-named fork (e.g. for testing)
+// side by side with the original install, each keeping its own separate saved state.
+let uuid = null;
 let application = null;
 
 //
 // Cinnamon extensions lifecycle functions
-// 
+//
 
-function init() {
+function init(meta) {
+    uuid = meta.uuid;
 }
 
 function enable() {
-    application = new Application(UUID);
+    application = new Application(uuid);
 }
 
 function disable() {

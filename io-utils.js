@@ -20,6 +20,10 @@ class LayoutIO {
         return `display-${displayIdx}`;
     }
 
+    instanceFileKey(displayIdx, desktopIdx) {
+        return `display-${displayIdx}-desktop-${desktopIdx}`;
+    }
+
     #filePathForDisplay(displayIdx) {
         return this.#filePathForKey(this.displayFileKey(displayIdx));
     }
@@ -28,17 +32,25 @@ class LayoutIO {
         return this.#filePathForKey(this.presetFileKey(presetIdx));
     }
 
-    // get the path to the layout file for a specific key
-    #filePathForKey(layoutKey) {
-        let configDir = GLib.get_user_config_dir();
-        let fancyTilesDir = Gio.File.new_for_path(configDir + '/' + this.#uuid);
+    #filePathForInstance(displayIdx, desktopIdx) {
+        return this.#filePathForKey(this.instanceFileKey(displayIdx, desktopIdx));
+    }
 
-        // Ensure directory exists
+    // ensure the extension's config directory exists and return its path
+    #ensureConfigDir() {
+        let configDir = GLib.get_user_config_dir() + '/' + this.#uuid;
+        let fancyTilesDir = Gio.File.new_for_path(configDir);
+
         if (!fancyTilesDir.query_exists(null)) {
             fancyTilesDir.make_directory_with_parents(null);
         }
 
-        return configDir + '/' + this.#uuid + '/layout-' + layoutKey.replace(/[^0-9a-zA-Z\-_]/g, '_') + '.json';
+        return configDir;
+    }
+
+    // get the path to the layout file for a specific key
+    #filePathForKey(layoutKey) {
+        return this.#ensureConfigDir() + '/layout-' + layoutKey.replace(/[^0-9a-zA-Z\-_]/g, '_') + '.json';
     }
 
 
@@ -62,6 +74,17 @@ class LayoutIO {
         }
 
         const filePath = this.#filePathForPreset(presetIdx);
+        return this.#saveToFile(layout, filePath);
+    }
+
+    saveLayoutForInstance(displayIdx, desktopIdx, layout) {
+        const integrityError = layout.getIntegrityError();
+        if (integrityError) {
+            global.logError('Invalid layout tree structure. Cannot save layout. ', integrityError);
+            return false;
+        }
+
+        const filePath = this.#filePathForInstance(displayIdx, desktopIdx);
         return this.#saveToFile(layout, filePath);
     }
 
@@ -99,13 +122,19 @@ class LayoutIO {
         return this.#loadLayoutFromFile(this.#filePathForPreset(presetIdx));
     }
 
+    loadLayoutForInstance(displayIdx, desktopIdx) {
+        return this.#loadLayoutFromFile(this.#filePathForInstance(displayIdx, desktopIdx));
+    }
+
     // load layout for display from file, if any
     #loadLayoutFromFile(filePath) {
         try {
             let file = Gio.File.new_for_path(filePath);
 
             if (!file.query_exists(null)) {
-                global.logError('no layout found for display ' + filePath);
+                // Not finding a file here is the normal case on first use (e.g. a desktop
+                // that hasn't been individually customised yet) -- not an error condition.
+                global.log('no layout found for display ' + filePath);
                 return null;
             }
 

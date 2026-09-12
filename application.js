@@ -86,12 +86,22 @@ class Application {
     // the active grid editor
     #gridEditor = null;
 
+    // the display the active grid editor was opened for, or null when none is open
+    #openEditorDisplayIdx = null;
+
+    // the desktop that was active when the editor was opened, so closing it can restore that
+    // desktop even if the user browsed to others via the edge-hover switcher in the meantime
+    #openEditorDesktopIdx = null;
+
     // the active drag session, if any (null between drags)
     #dragSession = null;
 
     #layoutIO;
 
-    // the layout trees for each display
+    // the layout trees for each display: { [displayIdx]: { default: LayoutNode, instances: { [desktopIdx]: LayoutNode } } }
+    // 'default' is the desktop-agnostic layout used when the active desktop has no instance of
+    // its own yet. 'instances' holds per-(display, desktop) layouts, created by editing that
+    // desktop directly (including loading a preset onto it).
     #layouts = {};
 
     // the layout trees for each preset
@@ -106,6 +116,7 @@ class Application {
     constructor(uuid) {
         this.#layoutIO = new LayoutIO(uuid);
         this.#connectWindowGrabs();
+        this.#connectWorkspaceSwitch();
 
         this.#settings = new Settings.ExtensionSettings(this, uuid);
         this.#settings.bindProperty(Settings.BindingDirection.IN, 'hotkey', 'hotkey', this.#enableHotkey);
@@ -186,8 +197,14 @@ class Application {
     }
 
     #saveLayouts() {
-        for (let key in this.#layouts) {
-            this.#layoutIO.saveLayoutForDisplay(key, this.#layouts[key]);
+        for (let displayIdx in this.#layouts) {
+            const displayLayouts = this.#layouts[displayIdx];
+            if (displayLayouts.default) {
+                this.#layoutIO.saveLayoutForDisplay(displayIdx, displayLayouts.default);
+            }
+            for (let desktopIdx in displayLayouts.instances) {
+                this.#layoutIO.saveLayoutForInstance(displayIdx, desktopIdx, displayLayouts.instances[desktopIdx]);
+            }
         }
         // save user presets
         for (let i = 0; i < 4; i++) {
@@ -228,6 +245,7 @@ class Application {
             return;
         }
 
+        const desktopIdx = this.#getActiveDesktopIndex();
         let layout = this.#readOrCreateLayoutForDisplay(displayIdx);
 
         if (!this.#presets || this.#presets.length === 0) {
@@ -236,36 +254,104 @@ class Application {
 
         const showGuideLines = this.#settings.settingsData.showGuideLines.value;
 
+        this.#openEditorDisplayIdx = displayIdx;
+        this.#openEditorDesktopIdx = desktopIdx;
         this.#gridEditor = new GridEditor(
             displayIdx,
             layout,
             this.#colors,
             this.#closeEditor.bind(this),
             this.#presets,
-            showGuideLines
+            showGuideLines,
+            (direction) => this.#switchDesktop(direction)
         );
+    }
+
+    // Switch to the adjacent desktop (direction -1/+1), triggered by the editor's edge-hover
+    // arrow. This goes through Cinnamon's normal workspace activation, so #onWorkspaceSwitched
+    // picks it up the same way it would an external hotkey and refreshes the open editor.
+    #switchDesktop(direction) {
+        const wm = global.workspace_manager;
+        const targetIdx = wm.get_active_workspace_index() + direction;
+        if (targetIdx < 0 || targetIdx >= wm.get_n_workspaces()) return;
+
+        wm.get_workspace_by_index(targetIdx).activate(global.get_current_time());
     }
 
     #closeEditor() {
         if (this.#gridEditor) {
+            const openedOnDesktopIdx = this.#openEditorDesktopIdx;
+
+            this.#openEditorDisplayIdx = null;
+            this.#openEditorDesktopIdx = null;
             this.#gridEditor.destroy();
             this.#gridEditor = null;
             this.#saveLayouts();
+
+            // Restore the desktop that was active when the editor was opened -- browsing to
+            // other desktops via the edge-hover switcher (or an external hotkey) while editing
+            // is just a peek, it shouldn't leave the user on a different desktop afterwards.
+            if (typeof openedOnDesktopIdx === 'number' && openedOnDesktopIdx !== this.#getActiveDesktopIndex()) {
+                const wm = global.workspace_manager;
+                wm.get_workspace_by_index(openedOnDesktopIdx)?.activate(global.get_current_time());
+            }
         }
     }
 
-    // read the layout from the configuration file, or set the default
-    #readOrCreateLayoutForDisplay(displayIdx, defaultLayout = LayoutOf2x2.clone()) {
-        if (this.#layouts[displayIdx]) {
-            return this.#layouts[displayIdx];
+    // Cinnamon workspaces have no stable identity beyond their numeric index.
+    #getActiveDesktopIndex() {
+        return global.workspace_manager.get_active_workspace_index();
+    }
+
+    // ensure the { default, instances } container exists for a display and return it
+    #getDisplayLayouts(displayIdx) {
+        if (!this.#layouts[displayIdx]) {
+            this.#layouts[displayIdx] = { default: null, instances: {} };
+        }
+        return this.#layouts[displayIdx];
+    }
+
+    // Resolve (and lazily load) the shared, desktop-agnostic layout for a display.
+    #resolveDefaultLayout(displayIdx, displayLayouts, defaultLayout) {
+        if (!displayLayouts.default) {
+            displayLayouts.default = this.#layoutIO.loadLayoutForDisplay(displayIdx) || defaultLayout.clone();
+        }
+        return displayLayouts.default;
+    }
+
+    // read the layout for the given display, creating one if none exists yet.
+    //
+    // With per-desktop layouts disabled (the default -- matches the original, pre-desktop-aware
+    // behaviour), this is just the one shared layout per display, regardless of desktop.
+    //
+    // With it enabled, resolution is per (display, desktop):
+    //   1) an instance already cached/loaded for this (display, desktop)
+    //   2) otherwise, this is the first time this desktop is resolved: clone the shared default
+    //      as this desktop's own independent instance, so it diverges from here on instead of
+    //      aliasing (and silently being mutated through) the same shared object as every other
+    //      not-yet-customised desktop.
+    #readOrCreateLayoutForDisplay(displayIdx, defaultLayout = LayoutOf2x2) {
+        const displayLayouts = this.#getDisplayLayouts(displayIdx);
+
+        if (!this.#settings.settingsData.enablePerDesktopLayouts.value) {
+            return this.#resolveDefaultLayout(displayIdx, displayLayouts, defaultLayout);
         }
 
-        let tree = this.#layoutIO.loadLayoutForDisplay(displayIdx);
-        if (!tree) {
-            tree = defaultLayout;
+        const desktopIdx = this.#getActiveDesktopIndex();
+
+        if (displayLayouts.instances[desktopIdx]) {
+            return displayLayouts.instances[desktopIdx];
         }
-        this.#layouts[displayIdx] = tree;
-        return tree;
+
+        let instance = this.#layoutIO.loadLayoutForInstance(displayIdx, desktopIdx);
+        if (instance) {
+            displayLayouts.instances[desktopIdx] = instance;
+            return instance;
+        }
+
+        instance = this.#resolveDefaultLayout(displayIdx, displayLayouts, defaultLayout).clone();
+        displayLayouts.instances[desktopIdx] = instance;
+        return instance;
     }
 
     #connectWindowGrabs() {
@@ -273,6 +359,22 @@ class Application {
             (display, screen, window, op) => this.#onGrabBegin(window, op));
         this.#signals.connect(global.display, 'grab-op-end',
             (display, screen, window, op) => this.#onGrabEnd(window, op));
+    }
+
+    #connectWorkspaceSwitch() {
+        this.#signals.connect(global.workspace_manager, 'workspace-switched',
+            () => this.#onWorkspaceSwitched());
+    }
+
+    // Keep an already-open grid editor in sync with the active desktop, so switching desktops
+    // (via the user's own workspace hotkey) shows that desktop's layout immediately instead of
+    // requiring a close/switch/reopen round-trip. The editor's modal overlay lives in
+    // Main.uiGroup, not on any one desktop, so it simply stays on screen across the switch.
+    #onWorkspaceSwitched() {
+        if (!this.#gridEditor || typeof this.#openEditorDisplayIdx !== 'number') return;
+
+        const layout = this.#readOrCreateLayoutForDisplay(this.#openEditorDisplayIdx);
+        this.#gridEditor.switchToLayout(layout);
     }
 
     #onGrabBegin(window, op) {
