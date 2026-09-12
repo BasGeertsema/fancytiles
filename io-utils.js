@@ -132,7 +132,9 @@ class LayoutIO {
             let file = Gio.File.new_for_path(filePath);
 
             if (!file.query_exists(null)) {
-                global.logError('no layout found for display ' + filePath);
+                // Not finding a file here is the normal case on first use (e.g. a desktop
+                // that hasn't been individually customised yet) -- not an error condition.
+                global.log('no layout found for display ' + filePath);
                 return null;
             }
 
