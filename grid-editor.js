@@ -40,19 +40,31 @@ class GridEditor {
     // whether to show guide lines when splitting
     #showGuideLines;
 
+    // callback to switch the active Cinnamon desktop: (direction) => void, direction is -1/+1.
+    // Application performs the actual workspace switch; the editor picks up the result via its
+    // own workspace-switched listener and calls switchToLayout(), same as an external hotkey.
+    #onSwitchDesktop;
+
+    // which screen edge the pointer is currently hovering near ('left' | 'right' | null),
+    // showing the desktop-switch arrow overlay
+    #edgeHover = null;
+    #edgeTolerance = 60;
+    #edgeButtonSize = { width: 48, height: 120 };
+
     // operations on the layout tree
     #marginsOperation;
     #previewOperation;
     #resizeOperation;
     #presetShortcutOperation;
 
-    constructor(displayIdx, layoutTree, colors, onClose, presets, showGuideLines) {
+    constructor(displayIdx, layoutTree, colors, onClose, presets, showGuideLines, onSwitchDesktop) {
         this.#displayIdx = displayIdx;
         this.#layoutTree = layoutTree;
         this.#colors = colors;
         this.#onClose = onClose;
         this.#presets = presets;
         this.#showGuideLines = showGuideLines;
+        this.#onSwitchDesktop = onSwitchDesktop;
 
         // get the working area to occupy as a grid editor   
         // and resize the layout to fit the work area
@@ -142,6 +154,32 @@ class GridEditor {
         this.#layoutTree.revert(layout.clone());
         this.#layoutTree.forSelfAndDescendants((node) => node.margin = currentMargin);
         this.#layoutTree.calculateRects(this.#workArea.x, this.#workArea.y, this.#workArea.width, this.#workArea.height);
+        this.#drawingArea.queue_repaint();
+    }
+
+    // Called by Application when the user switches the active (Cinnamon) desktop while this
+    // editor stays open, so the editor can show that desktop's layout immediately instead of
+    // requiring a close/switch/reopen round-trip.
+    switchToLayout(newTree) {
+        this.#swapLayoutTree(newTree);
+    }
+
+    // Swap #layoutTree to a different object reference and rebuild the operations that were
+    // constructed against the old one at construction time (they each capture `tree` in their
+    // constructor, see node_tree.js's LayoutOperation). A plain in-place revert() -- as
+    // #usePreset uses -- is not safe here: the incoming tree is a genuinely different layout
+    // instance (another desktop's), and reverting the OLD object in place would also corrupt
+    // whatever else that old reference is still cached as (e.g. the display's desktop-agnostic
+    // default).
+    #swapLayoutTree(newTree) {
+        newTree.calculateRects(this.#workArea.x, this.#workArea.y, this.#workArea.width, this.#workArea.height);
+
+        this.#layoutTree = newTree;
+        this.#previewOperation = new PreviewSplitOperation(this.#layoutTree, this.#workArea.width, this.#workArea.height, this.#showGuideLines);
+        this.#resizeOperation = new ResizeOperation(this.#layoutTree, this.#workArea.width, this.#workArea.height);
+        this.#marginsOperation = new MarginsOperation(this.#layoutTree);
+        this.#presetShortcutOperation = new PresetShortcutOperation(this.#layoutTree, this.#presets, this.#usePreset.bind(this));
+
         this.#drawingArea.queue_repaint();
     }
 
@@ -277,6 +315,7 @@ class GridEditor {
                 "<Page Up> / <Page Down> = Increase / Decrease spacing\n" +
                 "<SPACE> / <ALT> = Load / save user preset\n" +
                 "[1-8] = Load preset\n" +
+                "Move mouse to screen edge = Switch desktop\n" +
                 "<ESC> = Close editor"
         }));
         return dialog;
@@ -330,11 +369,15 @@ class GridEditor {
         const [width, height] = area.get_size();
         tree.calculateRects(actorX + buttonMargins, actorY + buttonMargins, width - 2 * buttonMargins, height - 2 * buttonMargins);
 
-        // Draw the layout
+        // Draw the layout. displayRect must be the actor's own origin (actorX, actorY) --
+        // matching #onRepaint's call below -- not actorX + buttonMargins: calculateRects()
+        // above already baked buttonMargins into the tree's absolute rect, so adding it again
+        // here would cancel it back out in drawLayout's `rect.x - displayRect.x` and leave the
+        // grid flush at local (0,0) instead of inset by buttonMargins on every side.
         drawLayout(
             cr,
             tree,
-            { x: actorX + buttonMargins, y: actorY + buttonMargins, width: width - 2 * buttonMargins, height: height - 2 * buttonMargins },
+            { x: actorX, y: actorY },
             this.#colors,
             2);
 
@@ -397,7 +440,67 @@ class GridEditor {
             cr.restore();
         }
 
+        if (this.#edgeHover) {
+            this.#drawEdgeButton(cr, this.#edgeHover, actorX, actorY);
+        }
+
         cr.$dispose();
+    }
+
+    // Screen-space rect of the desktop-switch arrow button for the given edge ('left'|'right')
+    #edgeButtonRect(edge) {
+        const r = this.#workArea;
+        const { width, height } = this.#edgeButtonSize;
+        return {
+            x: edge === 'right' ? r.x + r.width - width : r.x,
+            y: r.y + (r.height - height) / 2,
+            width,
+            height
+        };
+    }
+
+    #isNearLeftEdge(x, y) {
+        const r = this.#workArea;
+        return x <= r.x + this.#edgeTolerance && y >= r.y && y <= r.y + r.height;
+    }
+
+    #isNearRightEdge(x, y) {
+        const r = this.#workArea;
+        return x >= r.x + r.width - this.#edgeTolerance && y >= r.y && y <= r.y + r.height;
+    }
+
+    #isInsideRect(x, y, rect) {
+        return x >= rect.x && x <= rect.x + rect.width && y >= rect.y && y <= rect.y + rect.height;
+    }
+
+    #drawEdgeButton(cr, edge, actorX, actorY) {
+        const rect = this.#edgeButtonRect(edge);
+        const x = rect.x - actorX;
+        const y = rect.y - actorY;
+
+        cr.save();
+        const hc = this.#colors.highlight;
+        cr.setSourceRGBA(hc.r, hc.g, hc.b, hc.a);
+        cr.rectangle(x, y, rect.width, rect.height);
+        cr.fill();
+
+        const cx = x + rect.width / 2;
+        const cy = y + rect.height / 2;
+        const arrowSize = 16;
+        cr.setSourceRGBA(1, 1, 1, 0.9);
+        cr.newPath();
+        if (edge === 'right') {
+            cr.moveTo(cx - arrowSize / 2, cy - arrowSize);
+            cr.lineTo(cx + arrowSize / 2, cy);
+            cr.lineTo(cx - arrowSize / 2, cy + arrowSize);
+        } else {
+            cr.moveTo(cx + arrowSize / 2, cy - arrowSize);
+            cr.lineTo(cx - arrowSize / 2, cy);
+            cr.lineTo(cx + arrowSize / 2, cy + arrowSize);
+        }
+        cr.closePath();
+        cr.fill();
+        cr.restore();
     }
 
     #handleOperationResult(result) {
@@ -410,8 +513,26 @@ class GridEditor {
         return Clutter.EVENT_PROPAGATE;
     }
 
+    // The load/save preset dialogs are separate top-level actors layered on top of the main
+    // canvas, not a child of it -- so without this guard, motion/button/key events (including
+    // modifier state like CTRL) still reach the main canvas' operations while a dialog is open,
+    // e.g. silently starting a split-preview underneath the dialog.
+    #isDialogOpen() {
+        return this.#loadPresetDialog.visible || this.#savePresetDialog.visible;
+    }
+
     #onMotion(actor, event) {
+        if (this.#isDialogOpen()) {
+            return Clutter.EVENT_PROPAGATE;
+        }
+
         let [x, y, state] = global.get_pointer();
+
+        const newEdgeHover = this.#isNearLeftEdge(x, y) ? 'left' : this.#isNearRightEdge(x, y) ? 'right' : null;
+        if (newEdgeHover !== this.#edgeHover) {
+            this.#edgeHover = newEdgeHover;
+            this.#drawingArea.queue_repaint();
+        }
 
         return this.#handleOperationResult(
             this.#previewOperation.onMotion(x, y, state) ||
@@ -420,7 +541,16 @@ class GridEditor {
     }
 
     #onButtonPress(actor, event) {
+        if (this.#isDialogOpen()) {
+            return Clutter.EVENT_PROPAGATE;
+        }
+
         let [x, y, state] = global.get_pointer();
+
+        if (this.#edgeHover && this.#isInsideRect(x, y, this.#edgeButtonRect(this.#edgeHover))) {
+            this.#onSwitchDesktop(this.#edgeHover === 'right' ? 1 : -1);
+            return Clutter.EVENT_STOP;
+        }
 
         return this.#handleOperationResult(
             this.#previewOperation.onButtonPress(x, y, state, event.get_button()) ||
@@ -429,6 +559,10 @@ class GridEditor {
     }
 
     #onButtonRelease(actor, event) {
+        if (this.#isDialogOpen()) {
+            return Clutter.EVENT_PROPAGATE;
+        }
+
         let [x, y, state] = global.get_pointer();
 
         return this.#handleOperationResult(
@@ -444,6 +578,10 @@ class GridEditor {
         if (key === Clutter.KEY_space || key === Clutter.KEY_Alt_L || key === Clutter.KEY_Alt_R) {
             this.#loadPresetDialog.hide();
             this.#savePresetDialog.hide();
+        }
+
+        if (this.#isDialogOpen()) {
+            return Clutter.EVENT_PROPAGATE;
         }
 
         return this.#handleOperationResult(
@@ -469,6 +607,11 @@ class GridEditor {
                 this.#presetAreas[i].queue_repaint();
             }
         }
+
+        if (this.#isDialogOpen()) {
+            return Clutter.EVENT_PROPAGATE;
+        }
+
         return this.#handleOperationResult(
             this.#previewOperation.onKeyPress(x, y, state, key) ||
             this.#resizeOperation.onKeyPress(x, y, state, key) ||
