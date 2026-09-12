@@ -575,12 +575,17 @@ class GridEditor {
         let [x, y] = global.get_pointer();
         const key = event.get_key_symbol();
 
+        // Capture this *before* hiding: the release that closes the dialog (e.g. releasing
+        // SPACE) must still be suppressed from reaching the editor operations below, even
+        // though #isDialogOpen() would already report false once the dialog is hidden.
+        const wasDialogOpen = this.#isDialogOpen();
+
         if (key === Clutter.KEY_space || key === Clutter.KEY_Alt_L || key === Clutter.KEY_Alt_R) {
             this.#loadPresetDialog.hide();
             this.#savePresetDialog.hide();
         }
 
-        if (this.#isDialogOpen()) {
+        if (wasDialogOpen) {
             return Clutter.EVENT_PROPAGATE;
         }
 
