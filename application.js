@@ -270,9 +270,20 @@ class Application {
 
     #connectWindowGrabs() {
         this.#signals.connect(global.display, 'grab-op-begin',
-            (display, screen, window, op) => this.#onGrabBegin(window, op));
+            (...args) => this.#onGrabBegin(...this.#parseGrabArgs(args)));
         this.#signals.connect(global.display, 'grab-op-end',
-            (display, screen, window, op) => this.#onGrabEnd(window, op));
+            (...args) => this.#onGrabEnd(...this.#parseGrabArgs(args)));
+    }
+
+    // Cinnamon 5.x and earlier emitted (display, screen, window, op);
+    // Cinnamon 6.x emits (display, window, op) - MetaScreen is gone.
+    // Normalise both so the handler receives [window, op] either way.
+    // Without this, a 6.x emission yields window = the GrabOp number and
+    // op = undefined, and both handlers return early without logging.
+    #parseGrabArgs(args) {
+        const op = args[args.length - 1];
+        const window = args.length >= 4 ? args[2] : args[1];
+        return [window, op];
     }
 
     #onGrabBegin(window, op) {
